@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+.pytest_cache/
+
+# Node / Expo
+node_modules/
+.expo/
+
+# OS / IDE
+.DS_Store
+.vscode/
+
+# Local databases
+*.db
+*.sqlite
