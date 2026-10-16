@@ -1,228 +1,218 @@
-# Crabjeu
 
-**Francês Acessível para Todos** — MVP técnico para validação do fluxo crítico Offline-First.
+# 🦀 Crabjeu
 
-## Objetivo da entrega
+O **Crabjeu** é um projeto social e educacional desenvolvido para ampliar o acesso ao aprendizado de francês entre jovens e crianças da comunidade **Caranguejo Tabaiares**, em Recife/PE.
 
-Mitigar o maior risco computacional do Crabjeu: garantir que um aluno consiga realizar uma atividade sem internet, manter o dado persistido no dispositivo e sincronizá-lo posteriormente com o servidor sem perda ou duplicação. O educador deve conseguir recuperar o progresso a partir do banco central.
+A proposta parte de uma limitação concreta do contexto de uso: o acesso à internet pode ser intermitente. Por isso, o projeto adota uma arquitetura **Offline-First**, permitindo que o aluno continue utilizando o aplicativo, realizando atividades e registrando seu progresso mesmo sem conexão ativa. Quando a internet volta a estar disponível, os dados pendentes são sincronizados com o servidor.
 
-## Fluxo crítico validado
+O sistema também prevê um ambiente para educadores acompanharem o desenvolvimento dos alunos a partir dos dados consolidados no servidor.
 
-```text
-Aluno responde atividade
-        ↓
-SQLite no dispositivo
-        ↓
-Tentativa pendente permanece após fechar/reabrir o app
-        ↓
-Conexão retorna
-        ↓
-POST /api/v1/sync/attempts
-        ↓
-FastAPI valida e deduplica por attempt_id
-        ↓
-PostgreSQL salva activity_attempts
-        ↓
-Servidor consolida student_progress
-        ↓
-GET /api/v1/educator/students
-        ↓
-Educador recupera progresso real
-```
+---
 
-## Stack
+## 🎯 Objetivo do projeto
 
-- **Mobile:** React Native + Expo + SQLite
-- **Backend:** FastAPI + SQLAlchemy
-- **Banco central:** PostgreSQL 16
-- **Autenticação:** PIN armazenado com PBKDF2 + token JWT
-- **Infra local:** Docker Compose
+O objetivo principal do Crabjeu é oferecer uma ferramenta simples, acessível e adequada à realidade da comunidade, permitindo que alunos estudem conteúdos básicos de francês sem depender de conexão constante com a internet.
 
-## Estrutura
+O projeto busca:
 
-```text
-crabjeu_tarefa03/
-├── backend/
-│   ├── app/
-│   │   ├── database.py
-│   │   ├── main.py
-│   │   ├── models.py
-│   │   ├── schemas.py
-│   │   └── security.py
-│   ├── .env.example
-│   └── requirements.txt
-├── mobile/
-│   ├── App.js
-│   ├── api.js
-│   ├── db.js
-│   ├── app.json
-│   └── package.json
-├── docs/
-│   ├── CHECKLIST_ENTREGA.md
-│   └── ROTEIRO_VIDEO.md
-├── docker-compose.yml
-└── README.md
-```
+- ampliar o acesso ao aprendizado de francês;
+- reduzir a dependência de internet durante o uso do aplicativo;
+- disponibilizar atividades interativas e conteúdos educacionais;
+- registrar o progresso do aluno localmente;
+- sincronizar o progresso automaticamente quando houver conexão;
+- permitir que educadores acompanhem o desenvolvimento dos estudantes;
+- criar uma base tecnológica que possa futuramente ser expandida para outros conteúdos e comunidades.
 
-## 1. Subir o PostgreSQL
+---
 
-Pré-requisito: Docker Desktop.
+## 👥 Público e atores envolvidos
 
-```bash
-docker compose up -d
-```
+O Crabjeu foi pensado para funcionar em conjunto com diferentes atores:
 
-O banco fica disponível em `localhost:5432` com:
+- **Jovens e crianças da comunidade:** usuários principais do aplicativo;
+- **ONG Biblioteca Caranguejo Tabaiares:** apoio na aplicação, organização e acompanhamento do projeto;
+- **Educadores e voluntários:** apoio pedagógico e acompanhamento dos alunos;
+- **Equipe de desenvolvimento:** responsável pela implementação, manutenção e evolução da plataforma;
+- **Instituições parceiras e agentes de fomento:** possíveis apoiadores da continuidade e expansão do projeto.
+
+---
+
+# 🏗️ Arquitetura do sistema
+
+A arquitetura do Crabjeu foi planejada para separar claramente as responsabilidades entre o dispositivo do aluno, o servidor e o ambiente utilizado pelo educador.
+
+O princípio central é **Offline-First**: as funcionalidades essenciais do aluno devem continuar disponíveis mesmo quando não houver conexão com a internet.
 
 ```text
-Database: crabjeu
-User: crabjeu
-Password: crabjeu
+┌─────────────────────────────────────────────────────┐
+│              DISPOSITIVO DO ALUNO                   │
+│                                                     │
+│  ┌───────────────────────────────────────────────┐  │
+│  │          Aplicativo React Native             │  │
+│  │                                               │  │
+│  │  • Login simplificado                        │  │
+│  │  • Módulos de francês                        │  │
+│  │  • Atividades interativas                    │  │
+│  │  • Feedback ao aluno                         │  │
+│  └──────────────────────┬────────────────────────┘  │
+│                         │                           │
+│                         ▼                           │
+│  ┌───────────────────────────────────────────────┐  │
+│  │                  SQLite                       │  │
+│  │                                               │  │
+│  │  • Conteúdo disponível offline               │  │
+│  │  • Tentativas das atividades                 │  │
+│  │  • Progresso local                           │  │
+│  │  • Fila de sincronização                     │  │
+│  └──────────────────────┬────────────────────────┘  │
+└─────────────────────────┼───────────────────────────┘
+                          │
+                  Internet disponível
+                          │ HTTPS / JSON
+                          ▼
+┌─────────────────────────────────────────────────────┐
+│                 SERVIDOR / NUVEM                    │
+│                                                     │
+│  ┌───────────────────────────────────────────────┐  │
+│  │                  FastAPI                      │  │
+│  │                                               │  │
+│  │  • Autenticação                              │  │
+│  │  • Regras de negócio                         │  │
+│  │  • Sincronização                             │  │
+│  │  • Validação das respostas                   │  │
+│  │  • API REST                                  │  │
+│  └──────────────────────┬────────────────────────┘  │
+│                         │                           │
+│                         ▼                           │
+│  ┌───────────────────────────────────────────────┐  │
+│  │                PostgreSQL                     │  │
+│  │                                               │  │
+│  │  • Usuários                                  │  │
+│  │  • Módulos                                   │  │
+│  │  • Atividades                                │  │
+│  │  • Tentativas                                │  │
+│  │  • Progresso consolidado                     │  │
+│  └──────────────────────┬────────────────────────┘  │
+└─────────────────────────┼───────────────────────────┘
+                          │
+                          ▼
+             ┌────────────────────────┐
+             │ Dashboard do Educador  │
+             │                        │
+             │ • progresso            │
+             │ • desempenho           │
+             │ • última sincronização │
+             └────────────────────────┘
 ```
 
-As credenciais acima são apenas para desenvolvimento local.
+---
 
-## 2. Executar o backend
+## 🔄 Fluxo principal de dados
 
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate       # macOS/Linux
-# .venv\Scripts\activate        # Windows
-pip install -r requirements.txt
-export DATABASE_URL='postgresql+psycopg2://crabjeu:crabjeu@localhost:5432/crabjeu'
-export JWT_SECRET='uma-chave-local-para-demo'
-uvicorn app.main:app --reload
-```
-
-Documentação interativa:
+O principal fluxo do sistema ocorre da seguinte forma:
 
 ```text
-http://localhost:8000/docs
+Aluno realiza uma atividade
+            ↓
+Resposta é registrada no SQLite
+            ↓
+Tentativa fica disponível mesmo sem internet
+            ↓
+Conexão com a internet é restabelecida
+            ↓
+Aplicativo identifica registros pendentes
+            ↓
+Tentativas são enviadas para a API
+            ↓
+FastAPI valida os dados
+            ↓
+PostgreSQL armazena a tentativa
+            ↓
+Servidor atualiza o progresso consolidado
+            ↓
+Educador consulta o progresso
 ```
 
-Na primeira inicialização, o backend cria as tabelas e insere dados mínimos de demonstração no PostgreSQL.
+Esse fluxo permite que o aplicativo continue útil em ambientes com conexão instável e evita que o aprendizado dependa da disponibilidade permanente da rede.
 
-### Perfis demo
+---
 
-Aluno:
+# 📡 Estratégia Offline-First
+
+O funcionamento offline é uma das principais características do Crabjeu.
+
+## Conteúdo educacional
+
+Quando o dispositivo possui conexão, o aplicativo pode baixar módulos e atividades do servidor e armazená-los no SQLite.
+
+Depois disso, esse conteúdo permanece disponível no dispositivo mesmo sem internet.
 
 ```text
-João Pedro
-PIN: 1234
+Servidor
+   ↓
+Módulos e atividades
+   ↓
+SQLite
+   ↓
+Uso offline
 ```
 
-Educador:
+## Tentativas
+
+Cada vez que um aluno responde uma atividade, uma tentativa é salva primeiramente no banco local.
 
 ```text
-Educador Crabjeu
-PIN: 4321
+Atividade concluída
+       ↓
+SQLite
+       ↓
+synced = false
 ```
 
-Os PINs **não são armazenados em texto puro**; o seed grava apenas o hash PBKDF2.
-
-## 3. Executar o app React Native
-
-Pré-requisitos: Node.js + Expo.
-
-```bash
-cd mobile
-npm install
-```
-
-No macOS com simulador iOS, por exemplo:
-
-```bash
-EXPO_PUBLIC_API_URL=http://127.0.0.1:8000 npm start
-```
-
-Para celular físico, substitua `127.0.0.1` pelo IP do computador na mesma rede Wi‑Fi:
-
-```bash
-EXPO_PUBLIC_API_URL=http://192.168.X.X:8000 npm start
-```
-
-## 4. Demonstração do fluxo crítico
-
-### Etapa A — preparar cache local
-
-1. Com internet/backend disponível, abra o app.
-2. Baixe o perfil do aluno.
-3. Entre com PIN `1234`.
-4. O app baixa a atividade do backend e a grava no SQLite.
-
-A questão não está embutida na tela: ela é recuperada do servidor e cacheada localmente.
-
-### Etapa B — executar offline
-
-1. Desligue a rede do dispositivo ou pare temporariamente o backend.
-2. Responda à atividade.
-3. O app registra a tentativa no SQLite com `synced = 0`.
-4. Feche e reabra o app.
-5. O contador de tentativas pendentes permanece, provando persistência local.
-
-### Etapa C — sincronizar
-
-1. Restabeleça a conexão/backend.
-2. Toque em **Sincronizar agora**.
-3. O app envia as tentativas pendentes para `POST /api/v1/sync/attempts`.
-4. Cada tentativa possui `attempt_id` único. Se o mesmo registro for reenviado, o servidor o classifica como duplicado e não o salva novamente.
-5. Depois do sucesso, o SQLite local marca a tentativa como `synced = 1`.
-
-### Etapa D — recuperar pelo educador
-
-Use o Swagger (`/docs`):
-
-1. Liste `GET /api/v1/profiles` e copie o ID do educador diretamente do banco ou use o ID seed `22222222-2222-2222-2222-222222222222`.
-2. Faça `POST /api/v1/auth/login`:
-
-```json
-{
-  "profile_id": "22222222-2222-2222-2222-222222222222",
-  "pin": "4321"
-}
-```
-
-3. Copie o `token`.
-4. Chame `GET /api/v1/educator/students` com:
+Quando a conexão retorna:
 
 ```text
-Authorization: Bearer SEU_TOKEN
+Fila local
+    ↓
+API de sincronização
+    ↓
+PostgreSQL
+    ↓
+synced = true
 ```
 
-O resultado é calculado a partir das tabelas reais `activity_attempts` e `student_progress`.
+Cada tentativa possui um identificador único, permitindo que o servidor detecte reenvios e evite duplicações.
 
-## 5. Verificar diretamente no PostgreSQL
+---
 
-```bash
-docker compose exec db psql -U crabjeu -d crabjeu
-```
+# 🧰 Tecnologias utilizadas
 
-Depois:
+## Aplicativo
 
-```sql
-SELECT id, student_id, activity_id, selected_answer, score, completed_at
-FROM activity_attempts;
+- **React Native**
+- **Expo**
+- **JavaScript**
+- **SQLite**
 
-SELECT student_id, activity_id, best_score, attempts_count, last_attempt_at
-FROM student_progress;
-```
+O aplicativo é responsável pela experiência do aluno, armazenamento local e sincronização com o servidor.
 
-Isso é uma evidência simples de que o backend não está devolvendo dados hardcoded.
+## Backend
 
-## Por que esse é o maior risco computacional?
+- **Python**
+- **FastAPI**
+- **SQLAlchemy**
+- **JWT** para autenticação
 
-O Crabjeu foi concebido para uma realidade de acesso intermitente à internet. Se o aplicativo depender de conexão contínua, ele deixa de atender justamente o contexto para o qual foi projetado. Por isso, a persistência local e a sincronização posterior são o núcleo técnico prioritário deste MVP.
+O backend concentra regras de negócio, autenticação, validação dos dados, sincronização e acesso ao banco central.
 
-## Decisões para reduzir risco
+## Banco central
 
-- O conteúdo é cacheado no dispositivo para permanecer acessível offline.
-- Tentativas são registradas primeiro no SQLite.
-- Cada tentativa recebe um identificador único para sincronização idempotente.
-- O servidor não confia na pontuação enviada pelo cliente: ele recalcula a correção usando a resposta oficial da atividade.
-- O PostgreSQL mantém o histórico bruto de tentativas e um progresso consolidado separado.
-- A consulta do educador lê dados persistidos no banco central.
+- **PostgreSQL**
 
-## Evidência em vídeo
+Responsável pelo armazenamento centralizado das informações utilizadas pelo sistema e pelo acompanhamento dos educadores.
 
-Veja `docs/ROTEIRO_VIDEO.md` para um roteiro de 3 a 5 minutos alinhado aos critérios da tarefa.
+## Infraestrutura de desenvolvimento
+
+- **Docker**
+- **Docker Compose**
+- **Git / GitHub**
