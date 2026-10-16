@@ -28,8 +28,6 @@ O maior risco do Crabjeu é a dependência de conectividade em uma comunidade co
 - Sincronização idempotente por `attempt_id`.
 - Teste automatizado do fluxo ponta a ponta.
 - Docker Compose para subir o PostgreSQL.
-- README com instruções de execução.
-- Roteiro do screencast de 3 a 5 minutos.
 
 ## Teste automatizado
 
@@ -48,12 +46,3 @@ Resultado validado durante a preparação da entrega:
 ```text
 1 passed
 ```
-
-## O que precisa ser feito manualmente antes do envio
-
-1. Subir o repositório para o GitHub/GitLab da equipe.
-2. Cada integrante deve fazer ao menos commits próprios, se o professor avaliar autoria individual.
-3. Executar o PostgreSQL e o FastAPI no computador da apresentação.
-4. Executar o aplicativo em emulador ou celular.
-5. Gravar o screencast de 3 a 5 minutos seguindo `ROTEIRO_VIDEO.md`.
-6. Conferir se o link do repositório está acessível ao professor.

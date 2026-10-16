@@ -1,4 +1,4 @@
-# Crabjeu — Tarefa 03/06
+# Crabjeu
 
 **Francês Acessível para Todos** — MVP técnico para validação do fluxo crítico Offline-First.
 

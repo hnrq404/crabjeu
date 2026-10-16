@@ -4,6 +4,10 @@
     "slug": "crabjeu",
     "version": "0.3.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light"
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-sqlite",
+      "expo-status-bar"
+    ]
   }
 }
