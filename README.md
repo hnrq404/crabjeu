@@ -216,3 +216,62 @@ Responsável pelo armazenamento centralizado das informações utilizadas pelo s
 - **Docker**
 - **Docker Compose**
 - **Git / GitHub**
+
+---
+
+# 🌐 Versão web offline (PWA) com Docker
+
+Além do app nativo (Expo Go), o Crabjeu pode ser usado no navegador como **PWA**, que pode ser instalado na tela inicial e funciona sem internet depois do primeiro acesso.
+
+## Como subir tudo
+
+```bash
+docker compose up --build
+```
+
+| Serviço | Endereço | Função |
+|---------|----------|--------|
+| `web`   | http://localhost:8080 | PWA do jogo (nginx) + proxy de `/api` para o backend |
+| `api`   | http://localhost:8000 | FastAPI (também usada pelo app nativo) |
+| `db`    | localhost:5432 | PostgreSQL |
+
+Perfil de demonstração: **João Pedro**, PIN **1234**.
+
+## Como o offline funciona na web
+
+```text
+1º acesso (online)
+   ↓
+Service worker (sw.js) guarda o app inteiro no cache do navegador
+   ↓
+Login baixa perfis e atividades → armazenamento local do navegador
+   ↓
+Sem internet: o app abre do cache e as respostas ficam salvas com synced = 0
+   ↓
+Internet de volta: "Sincronizar agora" envia as tentativas à API
+```
+
+- `mobile/db.web.js` é a versão web de `mobile/db.js` (mesmas funções). O Metro escolhe esse arquivo automaticamente no build web; o app nativo continua usando SQLite.
+- `mobile/scripts/generate-sw.js` gera o `sw.js` depois do `expo export`, pré-carregando todos os arquivos do build.
+- Chamadas para `/api/` nunca vêm do cache: login e sincronização sempre usam o servidor real.
+
+## Como testar o modo offline
+
+1. Abra http://localhost:8080, escolha o perfil e faça login.
+2. No DevTools do navegador (F12) → **Application → Service Workers**, marque **Offline** (ou pare os containers com `docker compose stop`).
+3. Recarregue a página: o jogo continua abrindo. Responda a atividade e veja "Pendentes" aumentar.
+4. Volte a ficar online, faça login de novo se tiver recarregado a página, e toque em **Sincronizar agora**.
+
+## Limitações conhecidas
+
+- **HTTPS é obrigatório fora do `localhost`.** Navegadores só ativam service worker em `https://` ou `http://localhost`. Para os alunos acessarem pelo celular, o container `web` precisa ser publicado com HTTPS (ex.: hospedagem com certificado, ou um proxy reverso com Let's Encrypt).
+- O token de login fica só em memória: após recarregar a página, é preciso logar online de novo para sincronizar (mesmo comportamento do app nativo). As tentativas salvas não se perdem.
+- O armazenamento local da web usa `localStorage` (≈5 MB), suficiente para o conteúdo atual; se o conteúdo crescer muito, migrar para IndexedDB.
+
+## Build web sem Docker
+
+```bash
+cd mobile
+npm install
+npm run build:web   # gera mobile/dist
+```

@@ -1,4 +1,13 @@
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+import { Platform } from 'react-native';
+
+// No PWA (web) a API é servida pelo mesmo nginx que entrega o app (/api -> FastAPI),
+// então usamos a própria origem da página. No celular, usamos EXPO_PUBLIC_API_URL.
+const DEFAULT_API_URL =
+  Platform.OS === 'web' && typeof window !== 'undefined'
+    ? window.location.origin
+    : 'http://127.0.0.1:8000';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, options);

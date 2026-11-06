@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -25,6 +26,12 @@ import {
   markAttemptsSynced,
   saveAttempt,
 } from './db';
+
+// Alert.alert não exibe nada no react-native-web; no PWA usamos window.alert.
+const notify = (title, message) =>
+  Platform.OS === 'web' ? window.alert(`${title}
+
+${message}`) : Alert.alert(title, message);
 
 const makeAttemptId = () =>
   `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
@@ -71,7 +78,7 @@ export default function App() {
         setSelectedProfile(remote[0]);
         setStatusText('Perfis baixados. Toque em entrar novamente.');
       } catch (e) {
-        Alert.alert('Sem conexão', 'Não foi possível baixar o perfil inicial.');
+        notify('Sem conexão', 'Não foi possível baixar o perfil inicial.');
       }
       return;
     }
@@ -87,7 +94,7 @@ export default function App() {
       setStatusText('Login realizado e conteúdo atualizado. Agora você pode ficar offline.');
       await refreshCounts(profile.id);
     } catch (e) {
-      Alert.alert('Erro no login', e.message);
+      notify('Erro no login', e.message);
     }
   }
 
@@ -109,7 +116,7 @@ export default function App() {
 
   async function synchronize() {
     if (!token || !selectedProfile) {
-      Alert.alert('Login necessário', 'Faça login quando estiver online antes de sincronizar.');
+      notify('Login necessário', 'Faça login quando estiver online antes de sincronizar.');
       return;
     }
     const pending = await getPendingAttempts(selectedProfile.id);

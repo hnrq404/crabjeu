@@ -1,0 +1,20 @@
+{
+  "name": "Crabjeu — Francês acessível para todos",
+  "short_name": "Crabjeu",
+  "description": "Aprenda francês mesmo sem internet.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFF8F0",
+  "theme_color": "#E86F19",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

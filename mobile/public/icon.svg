@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#E86F19"/>
+  <!-- garras -->
+  <circle cx="126" cy="170" r="44" fill="#FFF8F0"/>
+  <circle cx="386" cy="170" r="44" fill="#FFF8F0"/>
+  <path d="M126 214 L176 270 M386 214 L336 270" stroke="#FFF8F0" stroke-width="22" stroke-linecap="round"/>
+  <!-- patas -->
+  <path d="M170 330 L110 380 M190 350 L150 410 M342 330 L402 380 M322 350 L362 410"
+        stroke="#FFF8F0" stroke-width="20" stroke-linecap="round"/>
+  <!-- corpo -->
+  <ellipse cx="256" cy="310" rx="120" ry="80" fill="#FFF8F0"/>
+  <!-- olhos -->
+  <circle cx="222" cy="296" r="14" fill="#1F2937"/>
+  <circle cx="290" cy="296" r="14" fill="#1F2937"/>
+</svg>
