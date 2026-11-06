@@ -19,14 +19,16 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
-    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    username: Mapped[str] = mapped_column(String(40), nullable=False, unique=True, index=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     avatar_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    pin_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
 class Module(Base):
+    """Uma fase do jogo. Cada fase tem perguntas em cada dificuldade."""
+
     __tablename__ = "modules"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
@@ -38,13 +40,19 @@ class Module(Base):
 
 
 class Activity(Base):
+    """Uma pergunta. kind: 'choice' (múltipla escolha) ou 'voice' (falar a frase)."""
+
     __tablename__ = "activities"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
     module_id: Mapped[str] = mapped_column(ForeignKey("modules.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="choice")
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="facil")
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
-    options_json: Mapped[str] = mapped_column(Text, nullable=False)
-    correct_answer: Mapped[str] = mapped_column(String(120), nullable=False)
+    prompt: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    options_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    correct_answer: Mapped[str] = mapped_column(String(200), nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
@@ -55,10 +63,10 @@ class ActivityAttempt(Base):
     __tablename__ = "activity_attempts"
     __table_args__ = (UniqueConstraint("id", name="uq_attempt_id"),)
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
     student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     activity_id: Mapped[str] = mapped_column(ForeignKey("activities.id"), nullable=False)
-    selected_answer: Mapped[str] = mapped_column(String(120), nullable=False)
+    selected_answer: Mapped[str] = mapped_column(String(200), nullable=False)
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False)
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

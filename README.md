@@ -235,7 +235,35 @@ docker compose up --build
 | `api`   | http://localhost:8000 | FastAPI (também usada pelo app nativo) |
 | `db`    | localhost:5432 | PostgreSQL |
 
-Perfil de demonstração: **João Pedro**, PIN **1234**.
+Conta de demonstração: usuário **joao**, senha **1234** (ou crie uma conta em "Cadastrar-se").
+
+> **Atualizando de uma versão anterior?** O esquema do banco mudou (login por usuário/senha, fases e dificuldades). Recrie o banco de desenvolvimento com `docker compose down -v && docker compose up --build`.
+
+## 🎮 Fluxo e regras do jogo
+
+Interface baseada no protótipo do Figma (`interface/interface_figma.png`):
+
+```text
+Login / Cadastro → Home (Iniciar · Configurações · Sair)
+                     ↓
+          Seleção de dificuldade (Fácil · Médio · Difícil)
+                     ↓
+     Fase com 6 perguntas (múltipla escolha + fala)
+                     ↓
+   Pop-up de acerto/erro com recompensa → "Fase finalizada!"
+```
+
+| Regra | Valor |
+|-------|-------|
+| Moedas por acerto | Fácil 1 · Médio 2 · Difícil 3 (só no **primeiro** acerto de cada pergunta) |
+| Nível | a cada 20 moedas |
+| Passar de fase | acertar pelo menos 4 de 6; as fases desbloqueiam em ordem |
+| Pergunta de voz | similaridade ≥ 75% com a frase esperada (tolera sotaque) |
+
+- As regras ficam em `backend/app/game_rules.py` (servidor, fonte da verdade) e `mobile/src/game.js` (cliente, para funcionar offline). `npm run check:rules` (em `mobile/`) confere se os dois dão o mesmo resultado nos casos de `backend/tests/answer_cases.json`.
+- O conteúdo das fases fica em `backend/app/seed_content.py`. Para publicar conteúdo novo, adicione itens e aumente `CONTENT_VERSION`: os aparelhos baixam na próxima sincronização.
+- **O que funciona offline:** login (depois do primeiro acesso online no aparelho), jogar, ganhar moedas/nível e trocar o avatar. **Precisa de internet:** cadastro, troca de nome/senha e o reconhecimento de voz (no navegador). Sem reconhecimento de voz, o aluno pode ouvir a frase (🔊) e pular a pergunta sem perder pontos.
+- A sincronização é automática: ao entrar, ao terminar uma fase, quando a internet volta e a cada minuto.
 
 ## Como o offline funciona na web
 
@@ -248,7 +276,7 @@ Login baixa perfis e atividades → armazenamento local do navegador
    ↓
 Sem internet: o app abre do cache e as respostas ficam salvas com synced = 0
    ↓
-Internet de volta: "Sincronizar agora" envia as tentativas à API
+Internet de volta: a sincronização automática envia as tentativas à API
 ```
 
 - `mobile/db.web.js` é a versão web de `mobile/db.js` (mesmas funções). O Metro escolhe esse arquivo automaticamente no build web; o app nativo continua usando SQLite.
@@ -259,13 +287,13 @@ Internet de volta: "Sincronizar agora" envia as tentativas à API
 
 1. Abra http://localhost:8080, escolha o perfil e faça login.
 2. No DevTools do navegador (F12) → **Application → Service Workers**, marque **Offline** (ou pare os containers com `docker compose stop`).
-3. Recarregue a página: o jogo continua abrindo. Responda a atividade e veja "Pendentes" aumentar.
-4. Volte a ficar online, faça login de novo se tiver recarregado a página, e toque em **Sincronizar agora**.
+3. Recarregue a página: o jogo continua abrindo. Jogue uma fase e veja o aviso "respostas aguardando internet".
+4. Volte a ficar online: as respostas sobem sozinhas e o selo mostra "Progresso salvo no servidor".
 
 ## Limitações conhecidas
 
 - **HTTPS é obrigatório fora do `localhost`.** Navegadores só ativam service worker em `https://` ou `http://localhost`. Para os alunos acessarem pelo celular, o container `web` precisa ser publicado com HTTPS (ex.: hospedagem com certificado, ou um proxy reverso com Let's Encrypt).
-- O token de login fica só em memória: após recarregar a página, é preciso logar online de novo para sincronizar (mesmo comportamento do app nativo). As tentativas salvas não se perdem.
+- O reconhecimento de voz no navegador (Web Speech API) depende de internet e funciona melhor no Chrome. No app nativo (Expo Go) ele ainda não está disponível; o caminho é um *development build* com `expo-speech-recognition`.
 - O armazenamento local da web usa `localStorage` (≈5 MB), suficiente para o conteúdo atual; se o conteúdo crescer muito, migrar para IndexedDB.
 
 ## Build web sem Docker
