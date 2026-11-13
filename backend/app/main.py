@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,19 @@ from .schemas import LoginIn, LoginOut, ProfileOut, SyncAttemptsIn, SyncAttempts
 from .security import create_access_token, decode_access_token, hash_pin, verify_pin
 
 app = FastAPI(title="Crabjeu API", version="0.3.0")
+
+# CORS para a versão web do app (Expo web). Lista separada por vírgulas.
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost:8081,http://127.0.0.1:8081").split(",")
+    if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 DEMO_STUDENT_ID = "11111111-1111-1111-1111-111111111111"
 DEMO_EDUCATOR_ID = "22222222-2222-2222-2222-222222222222"

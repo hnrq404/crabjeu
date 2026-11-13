@@ -26,8 +26,12 @@ import {
   saveAttempt,
 } from './db';
 
+// UUID v4 (36 caracteres), compatível com a coluna VARCHAR(36) do backend.
 const makeAttemptId = () =>
-  `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
+  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
 
 export default function App() {
   const [ready, setReady] = useState(false);
