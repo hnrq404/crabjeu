@@ -12,6 +12,8 @@ node_modules/
 .expo/
 mobile/.expo/
 mobile/node_modules/
+mobile/dist/
+dist/
 
 # OS / IDE
 .DS_Store

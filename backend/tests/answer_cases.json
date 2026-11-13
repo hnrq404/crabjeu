@@ -1,0 +1,14 @@
+[
+  { "kind": "voice", "answer": "bonjour", "expected": "Bonjour", "correct": true },
+  { "kind": "voice", "answer": "Bonjour princesse", "expected": "Bonjour princesse", "correct": true },
+  { "kind": "voice", "answer": "bonjour princess", "expected": "Bonjour princesse", "correct": true },
+  { "kind": "voice", "answer": "comment ca va", "expected": "Comment ça va ?", "correct": true },
+  { "kind": "voice", "answer": "je m appelle ana", "expected": "Je m'appelle Ana", "correct": true },
+  { "kind": "voice", "answer": "enchante je mappelle anna", "expected": "Enchanté, je m'appelle Ana", "correct": true },
+  { "kind": "voice", "answer": "bonsoir", "expected": "Bonjour", "correct": false },
+  { "kind": "voice", "answer": "merci", "expected": "Bonjour princesse", "correct": false },
+  { "kind": "voice", "answer": "", "expected": "Rouge", "correct": false },
+  { "kind": "choice", "answer": "Bom dia, princesa", "expected": "Bom dia, princesa", "correct": true },
+  { "kind": "choice", "answer": "bom dia, princesa", "expected": "Bom dia, princesa", "correct": false },
+  { "kind": "choice", "answer": "Boa noite", "expected": "Bom dia, princesa", "correct": false }
+]

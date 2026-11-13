@@ -3,11 +3,12 @@
     "name": "Crabjeu",
     "slug": "crabjeu",
     "version": "0.3.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "light",
     "plugins": [
       "expo-sqlite",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-font"
     ]
   }
 }

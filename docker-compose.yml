@@ -15,5 +15,23 @@ services:
       timeout: 3s
       retries: 10
 
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://crabjeu:crabjeu@db:5432/crabjeu
+      JWT_SECRET: ${JWT_SECRET:-troque-por-uma-chave-secreta}
+    ports:
+      - "8000:8000" # usado pelo app nativo (Expo Go)
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./mobile
+    ports:
+      - "8080:80" # PWA: http://localhost:8080
+    depends_on:
+      - api
+
 volumes:
   crabjeu_pgdata:
