@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: crabjeu
       POSTGRES_PASSWORD: crabjeu
     ports:
-      - "5432:5432"
+      - "${CRABJEU_DB_PORT:-5432}:5432"
     volumes:
       - crabjeu_pgdata:/var/lib/postgresql/data
     healthcheck:
