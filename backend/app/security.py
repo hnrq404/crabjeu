@@ -8,7 +8,8 @@ import jwt
 
 JWT_SECRET = os.getenv("JWT_SECRET", "troque-esta-chave-no-ambiente")
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_HOURS = 8
+# Sessões longas: o aluno pode ficar dias offline e sincronizar depois.
+JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", str(24 * 30)))
 
 
 def hash_pin(pin: str, salt: bytes | None = None) -> str:
