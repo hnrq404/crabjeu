@@ -17,6 +17,8 @@ from app.main import DEMO_STUDENT_ID, app  # noqa: E402
 from app.seed_content import LEGACY_ACTIVITY_ID  # noqa: E402
 
 CASES = json.loads((Path(__file__).parent / "answer_cases.json").read_text(encoding="utf-8"))
+STREAK_CASES = json.loads((Path(__file__).parent / "streak_cases.json").read_text(encoding="utf-8"))
+LEVEL_CASES = json.loads((Path(__file__).parent / "level_cases.json").read_text(encoding="utf-8"))
 
 
 def auth(token: str) -> dict:
@@ -39,6 +41,63 @@ def test_answer_rules_match_shared_cases(case):
     assert game_rules.is_correct(case["kind"], case["answer"], case["expected"]) is case["correct"]
 
 
+@pytest.mark.parametrize("case", LEVEL_CASES, ids=lambda c: f"coins={c['coins']}")
+def test_level_curve_matches_shared_cases(case):
+    # Também verificados no cliente (mobile/scripts/check-game-rules.js).
+    info = game_rules.level_info(case["coins"])
+    assert (info["level"], info["into"], info["needed"]) == (case["level"], case["into"], case["needed"])
+    assert info["remaining"] == case["needed"] - case["into"]
+    assert game_rules.tier_for(info["level"])["title"] == case["tier"]
+
+
+@pytest.mark.parametrize("case", STREAK_CASES, ids=lambda c: c["name"])
+def test_streak_matches_shared_cases(case):
+    got = game_rules.streak_info(set(case["days"]), case["today"])
+    assert got == {"current": case["current"], "best": case["best"], "active_today": case["active_today"]}
+
+
+def test_day_key_uses_recife_time():
+    from datetime import datetime, timezone
+
+    # 22h30 em Recife ainda é o mesmo dia, embora já seja dia seguinte em UTC.
+    assert game_rules.day_key(datetime(2026, 11, 19, 1, 30, tzinfo=timezone.utc)) == "2026-11-18"
+    assert game_rules.day_key(datetime(2026, 11, 19, 3, 0, tzinfo=timezone.utc)) == "2026-11-19"
+
+
+def test_tiers_are_ordered():
+    assert game_rules.TIERS[0]["min_level"] == 0
+    levels = [t["min_level"] for t in game_rules.TIERS]
+    assert levels == sorted(levels) and len(set(levels)) == len(levels)
+
+
+def test_number_words_for_speech():
+    assert game_rules.number_to_french(5) == "cinq"
+    assert game_rules.number_to_french(21) == "vingt et un"
+    assert game_rules.number_to_french(71) == "soixante et onze"
+    assert game_rules.number_to_french(80) == "quatre vingts"
+    assert game_rules.number_to_french(99) == "quatre vingt dix neuf"
+
+
+def test_question_bank_is_consistent():
+    from app.seed_content import iter_content
+
+    seen = set()
+    total = 0
+    for module, activities in iter_content():
+        for difficulty in game_rules.DIFFICULTIES:
+            pool = [a for a in activities if a["difficulty"] == difficulty]
+            # Toda rodada consegue ser montada sem precisar de voz.
+            assert sum(a["kind"] == "choice" for a in pool) >= game_rules.ROUND_SIZE, (module["title"], difficulty)
+        for a in activities:
+            assert a["id"] not in seen
+            seen.add(a["id"])
+            if a["kind"] in ("choice", "listen"):
+                assert a["correct_answer"] in a["options"]
+                assert len(set(a["options"])) == len(a["options"]) >= 3
+        total += len(activities)
+    assert total >= 1200
+
+
 def test_end_to_end_game_flow():
     with TestClient(app) as client:
         # Login do aluno de demonstração com usuário e senha.
@@ -51,11 +110,11 @@ def test_end_to_end_game_flow():
         # Conteúdo: fases com perguntas de múltipla escolha e de voz em cada dificuldade.
         content = client.get("/api/v1/content/sync?since_version=0", headers=auth(student_token)).json()
         activities = {a["id"]: a for a in content["activities"]}
-        assert len(content["modules"]) >= 2
+        assert len(content["modules"]) >= 10
         assert LEGACY_ACTIVITY_ID in activities
         for difficulty in game_rules.DIFFICULTIES:
             kinds = {a["kind"] for a in activities.values() if a["difficulty"] == difficulty}
-            assert kinds == {"choice", "voice"}
+            assert {"choice", "voice"} <= kinds
 
         # Nada novo para quem já tem a versão atual.
         again = client.get(
@@ -82,6 +141,14 @@ def test_end_to_end_game_flow():
         assert body["synced_records"] == 4
         assert body["duplicated_records"] == 0
         assert body["coins"] == 3
+        assert body["level"] == 0
+
+        # As tentativas foram feitas em 16/10 às 15h30 de Recife: um dia ativo.
+        me = client.get("/api/v1/me", headers=auth(student_token)).json()
+        assert me["active_days"] == ["2026-10-16"]
+        assert me["best_streak"] == 1
+        # Respondidas (certas e erradas): base para nunca repetir perguntas.
+        assert set(me["answered_activity_ids"]) == {LEGACY_ACTIVITY_ID, voice_q["id"]}
         assert set(body["earned_activity_ids"]) == {LEGACY_ACTIVITY_ID, voice_q["id"]}
 
         # Reenvio do mesmo attempt_id prova idempotência / deduplicação.

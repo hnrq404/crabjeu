@@ -7,9 +7,54 @@ import * as Crypto from 'expo-crypto';
 
 import { api } from './api';
 import * as db from './db';
-import { coinsFor, levelInfo, makeId } from './game';
+import { buildPhases, coinsFor, dayKey, lastWeek, levelInfo, makeId, phaseProgress, streakInfo } from './game';
+import * as speech from './speech';
 
 const CURRENT_USER = 'current_user_id';
+const activeDaysKey = userId => `active_days:${userId}`;
+
+const answeredKey = userId => `answered:${userId}`;
+const skippedKey = userId => `skipped:${userId}`;
+
+async function readList(key) {
+  try {
+    const saved = await db.getSetting(key);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Guarda as perguntas já respondidas vindas do servidor (inclui outros aparelhos). */
+async function rememberAnswered(userId, ids) {
+  if (Array.isArray(ids)) await db.setSetting(answeredKey(userId), JSON.stringify(ids));
+}
+
+/** Pergunta pulada ("não posso falar agora"): também não volta mais. */
+export async function markSkipped(userId, activityId) {
+  const list = await readList(skippedKey(userId));
+  if (!list.includes(activityId)) await db.setSetting(skippedKey(userId), JSON.stringify([...list, activityId]));
+}
+
+/** Tudo o que o aluno já viu: respondidas (servidor + aparelho) e puladas. */
+export async function loadSeen(userId) {
+  const [server, local, skipped] = await Promise.all([
+    readList(answeredKey(userId)),
+    db.getAttemptedIds(userId),
+    readList(skippedKey(userId)),
+  ]);
+  return new Set([...server, ...local, ...skipped]);
+}
+
+/** Recursos de voz do aparelho, que decidem quais perguntas entram nas fases. */
+export function deviceAbilities() {
+  return { allowVoice: speech.recognitionAvailable().ok, allowListen: speech.canSpeak() };
+}
+
+/** Guarda os dias ativos vindos do servidor (histórico de outros aparelhos). */
+async function rememberActiveDays(userId, days) {
+  if (Array.isArray(days)) await db.setSetting(activeDaysKey(userId), JSON.stringify(days));
+}
 
 async function hashPassword(password, salt) {
   return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, `crabjeu:${salt}:${password}`);
@@ -31,6 +76,8 @@ async function rememberSession({ user, token }, password) {
   await db.upsertUser(user);
   await db.setUserToken(user.id, token);
   await db.addEarned(user.id, user.earned_activity_ids ?? []);
+  await rememberActiveDays(user.id, user.active_days);
+  await rememberAnswered(user.id, user.answered_activity_ids);
   await rememberCredentials(user.id, password);
   await db.setSetting(CURRENT_USER, user.id);
   await downloadContent(token).catch(() => {});
@@ -164,6 +211,8 @@ async function doSync(userId) {
     const me = await api.me(token);
     await db.upsertUser(me);
     await db.addEarned(userId, me.earned_activity_ids);
+    await rememberActiveDays(userId, me.active_days);
+    await rememberAnswered(userId, me.answered_activity_ids);
     return { state: 'synced', at: new Date() };
   } catch (e) {
     if (e.offline) return { state: 'offline' };
@@ -177,12 +226,35 @@ async function doSync(userId) {
 
 // ------------------------------------------------------------------ estatísticas
 
+export async function loadActiveDays(userId) {
+  const [saved, moments] = await Promise.all([db.getSetting(activeDaysKey(userId)), db.getAttemptMoments(userId)]);
+  let days = [];
+  try {
+    days = saved ? JSON.parse(saved) : [];
+  } catch {
+    days = [];
+  }
+  return new Set([...days, ...moments.map(m => dayKey(m))]);
+}
+
 export async function loadStats(userId) {
-  const [earned, activities, pending] = await Promise.all([
+  const [earned, modules, activities, pending, days, seen] = await Promise.all([
     db.getEarnedIds(userId),
+    db.getModules(),
     db.getActivities(),
     db.countPendingAttempts(userId),
+    loadActiveDays(userId),
+    loadSeen(userId),
   ]);
   const coins = coinsFor(earned, new Map(activities.map(a => [a.id, a])));
-  return { coins, ...levelInfo(coins), pending, hasContent: activities.length > 0 };
+  const info = levelInfo(coins);
+  return {
+    coins,
+    ...info,
+    phases: phaseProgress(buildPhases(modules, activities, deviceAbilities()), seen),
+    pending,
+    hasContent: activities.length > 0,
+    streak: streakInfo(days),
+    week: lastWeek(days),
+  };
 }

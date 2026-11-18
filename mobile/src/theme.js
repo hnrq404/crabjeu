@@ -17,8 +17,20 @@ export const colors = {
   correct: '#2BD94A',
   wrong: '#F02B2B',
   gold: '#F2B705',
-  overlay: 'rgba(0, 0, 0, 0.45)',
+  overlay: 'rgba(20, 26, 14, 0.62)',
+  // Tons de apoio (sombras sólidas dos botões "3D" e superfícies).
+  orangeShadow: '#7E2A08',
+  whiteShadow: '#C9BBAE',
+  cardShadow: '#BDB3A8',
+  peach: '#FFF1E6',
+  correctDark: '#1E8E3E',
+  wrongDark: '#B71C1C',
+  focus: '#F2B705',
 };
+
+// Escala de espaçamento (grade de 4/8 px) e raios.
+export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
+export const radius = { sm: 8, md: 14, lg: 20, pill: 999 };
 
 export const fonts = {
   regular: 'Fredoka_400Regular',
@@ -26,7 +38,7 @@ export const fonts = {
   bold: 'Fredoka_700Bold',
 };
 
-export const COIN = '🪙';
+// A moeda é desenhada em SVG: veja CoinIcon em components/icons.js.
 
 // Avatares da aba "Avatar" das configurações.
 export const AVATARS = [
@@ -43,7 +55,7 @@ export const AVATARS = [
 ];
 
 export const DIFFICULTY_STYLES = {
-  facil: { label: 'FÁCIL', color: '#DDF7B5', border: '#9BCB55' },
-  medio: { label: 'MÉDIO', color: '#FFE08A', border: '#E3B92E' },
-  dificil: { label: 'DIFÍCIL', color: '#FFA6A6', border: '#E06666' },
+  facil: { label: 'FÁCIL', color: '#DDF7B5', border: '#9BCB55', stars: 1 },
+  medio: { label: 'MÉDIO', color: '#FFE08A', border: '#E3B92E', stars: 2 },
+  dificil: { label: 'DIFÍCIL', color: '#FFA6A6', border: '#E06666', stars: 3 },
 };

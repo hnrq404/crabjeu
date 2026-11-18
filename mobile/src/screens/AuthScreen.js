@@ -1,24 +1,13 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Crab } from '../components/art';
+import { Logo } from '../components/art';
 import { MenuBackground } from '../components/backgrounds';
 import { BackButton, Btn, Field, Message, Txt } from '../components/ui';
 import * as session from '../session';
-import { colors } from '../theme';
+import { colors, radius, space } from '../theme';
 
 const USERNAME_RE = /^[A-Za-z0-9_.]{3,20}$/;
-
-function Logo() {
-  return (
-    <View style={styles.logo}>
-      <Crab size={84} color="#E0431B" />
-      <Txt weight="bold" style={styles.logoText}>
-        CRABJEU
-      </Txt>
-    </View>
-  );
-}
 
 export default function AuthScreen({ onAuthenticated }) {
   const [mode, setMode] = useState('login');
@@ -79,10 +68,14 @@ export default function AuthScreen({ onAuthenticated }) {
         <ScrollView contentContainerStyle={styles.center} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
             {isRegister ? <BackButton onPress={() => switchMode('login')} color={colors.orange} /> : null}
-            <Logo />
+            <Logo size={84} style={styles.logo} />
+            <Txt weight="semibold" style={styles.subtitle}>
+              {isRegister ? 'Crie sua conta para começar' : 'Aprenda francês brincando!'}
+            </Txt>
 
             <Field
               label="Usuário"
+              placeholder="Seu nome de usuário"
               value={username}
               onChangeText={setUsername}
               textContentType="username"
@@ -90,6 +83,7 @@ export default function AuthScreen({ onAuthenticated }) {
             />
             <Field
               label="Senha"
+              placeholder="Sua senha"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -99,6 +93,7 @@ export default function AuthScreen({ onAuthenticated }) {
             {isRegister ? (
               <Field
                 label="Confirmar senha"
+                placeholder="Digite a senha de novo"
                 value={confirm}
                 onChangeText={setConfirm}
                 secureTextEntry
@@ -115,7 +110,14 @@ export default function AuthScreen({ onAuthenticated }) {
               style={styles.mainButton}
             />
             {!isRegister ? (
-              <Btn title="Cadastrar-se" variant="muted" small onPress={() => switchMode('register')} style={styles.secondButton} />
+              <View style={styles.switchRow}>
+                <View style={styles.divider} />
+                <Txt style={styles.switchText}>Ainda não tem conta?</Txt>
+                <View style={styles.divider} />
+              </View>
+            ) : null}
+            {!isRegister ? (
+              <Btn title="Cadastrar-se" variant="secondary" small onPress={() => switchMode('register')} style={styles.secondButton} />
             ) : null}
           </View>
         </ScrollView>
@@ -125,18 +127,29 @@ export default function AuthScreen({ onAuthenticated }) {
 }
 
 const styles = StyleSheet.create({
-  center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
+  center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg },
   card: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 380,
     backgroundColor: colors.cardGlass,
-    borderRadius: 6,
-    paddingHorizontal: 28,
-    paddingVertical: 20,
+    borderRadius: radius.lg,
+    borderBottomWidth: 6,
+    borderBottomColor: colors.cardShadow,
+    paddingHorizontal: space.xl + 4,
+    paddingTop: space.xl,
+    paddingBottom: space.xl,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
-  logo: { alignItems: 'center', marginBottom: 8 },
-  logoText: { color: colors.orangeDark, fontSize: 18, letterSpacing: 2, marginTop: 2 },
-  mainButton: { alignSelf: 'stretch', borderRadius: 4, marginTop: 6 },
-  secondButton: { marginTop: 10, borderRadius: 4 },
+  logo: { marginBottom: space.xs },
+  subtitle: { color: colors.muted, fontSize: 14, marginBottom: space.lg, textAlign: 'center' },
+  mainButton: { alignSelf: 'stretch', marginTop: space.sm },
+  switchRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', marginTop: space.lg },
+  divider: { flex: 1, height: 1, backgroundColor: colors.line },
+  switchText: { fontSize: 13, color: colors.muted, marginHorizontal: space.sm },
+  secondButton: { alignSelf: 'stretch', marginTop: space.sm },
 });

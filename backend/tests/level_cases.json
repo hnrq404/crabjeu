@@ -1,0 +1,11 @@
+[
+  { "coins": 0, "level": 0, "into": 0, "needed": 10, "tier": "Caranguejinho" },
+  { "coins": 9, "level": 0, "into": 9, "needed": 10, "tier": "Caranguejinho" },
+  { "coins": 10, "level": 1, "into": 0, "needed": 15, "tier": "Caranguejinho" },
+  { "coins": 24, "level": 1, "into": 14, "needed": 15, "tier": "Caranguejinho" },
+  { "coins": 25, "level": 2, "into": 0, "needed": 20, "tier": "Explorador do mangue" },
+  { "coins": 70, "level": 4, "into": 0, "needed": 30, "tier": "Aventureiro" },
+  { "coins": 140, "level": 6, "into": 5, "needed": 40, "tier": "Navegador" },
+  { "coins": 230, "level": 8, "into": 10, "needed": 50, "tier": "Capitão" },
+  { "coins": 400, "level": 11, "into": 15, "needed": 65, "tier": "Mestre do francês" }
+]

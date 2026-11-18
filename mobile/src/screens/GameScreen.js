@@ -1,90 +1,228 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Crab } from '../components/art';
 import { GameBackground } from '../components/backgrounds';
-import { BackButton, Btn, Popup, Title, Txt } from '../components/ui';
+import { CheckIcon, CloseIcon, CrossIcon, FlameIcon, MicIcon, SpeakerIcon, StarIcon, TargetIcon } from '../components/icons';
+import { StreakWeek } from '../components/streak';
+import { Btn, Coins, Popup, Txt, useReducedMotion } from '../components/ui';
 import * as db from '../db';
-import { bestTranscript, isCorrect, makeId, PASS_RATIO, phasePassed, pickPhase, REWARDS, shuffle } from '../game';
+import {
+  bestTranscript,
+  buildPhases,
+  coinsFor,
+  dayKey,
+  isCorrect,
+  lastWeek,
+  levelInfo,
+  makeId,
+  nextQuestions,
+  phaseProgress,
+  REWARDS,
+  shuffle,
+  streakInfo,
+} from '../game';
+import * as session from '../session';
 import * as speech from '../speech';
-import { COIN, colors, DIFFICULTY_STYLES } from '../theme';
+import { colors, DIFFICULTY_STYLES, radius, space } from '../theme';
 
 const LETTERS = ['a', 'b', 'c', 'd', 'e', 'f'];
+const NATIVE_DRIVER = Platform.OS !== 'web';
+const PRAISE = ['Muito bem!', 'Excelente!', 'Isso aí!', 'Mandou bem!', 'Perfeito!'];
 
-// ------------------------------------------------------------------ cabeçalho
+// O balão só tem botão de ouvir quando a frase destacada está em francês.
+const speakable = q => q.prompt && !q.prompt.includes('___') && q.question_text !== 'Qual é a frase em francês?';
 
-function QuestionHeader({ number, total }) {
+// ------------------------------------------------------------------- topo
+
+function LessonTop({ progress, combo, onClose }) {
+  const reduced = useReducedMotion();
+  const width = useRef(new Animated.Value(progress)).current;
+  useEffect(() => {
+    if (reduced) width.setValue(progress);
+    else Animated.timing(width, { toValue: progress, duration: 300, easing: Easing.out(Easing.quad), useNativeDriver: false }).start();
+  }, [progress, reduced, width]);
+
   return (
-    <View style={styles.header}>
-      <Crab size={64} color="#E0431B" style={styles.headerCrab} />
-      <View style={styles.headerCard}>
-        <Txt weight="bold" style={styles.headerText}>
-          Pergunta {number}/{total}
+    <View style={styles.top}>
+      <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Sair da rodada" hitSlop={8} style={styles.close}>
+        <CloseIcon size={26} color={colors.white} strokeWidth={3} />
+      </Pressable>
+      <View
+        style={styles.track}
+        accessibilityRole="progressbar"
+        accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}
+      >
+        <Animated.View style={[styles.trackFill, { width: width.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]}>
+          <View style={styles.trackShine} />
+        </Animated.View>
+      </View>
+      <View style={[styles.combo, combo < 2 && { opacity: 0.35 }]} accessibilityLabel={`${combo} acertos seguidos`}>
+        <FlameIcon size={22} off={combo < 2} />
+        <Txt weight="bold" style={styles.comboText}>
+          {combo}
         </Txt>
       </View>
     </View>
   );
 }
 
-/** Pílula branca com o enunciado e, à direita, a frase em destaque (laranja). */
-function PromptPill({ label, prompt, onListen }) {
+/** Selo com a dificuldade da pergunta atual e quantas moedas ela vale. */
+function DifficultyChip({ difficulty }) {
+  const s = DIFFICULTY_STYLES[difficulty];
   return (
-    <View style={styles.promptPill}>
-      <Txt weight="bold" style={styles.promptLabel}>
-        {label}
+    <View style={[styles.diffChip, { backgroundColor: s.color, borderColor: s.border }]}>
+      <View style={{ flexDirection: 'row', marginRight: 6 }}>
+        {[0, 1, 2].map(i => (
+          <StarIcon key={i} size={12} color={i < s.stars ? colors.gold : 'rgba(0,0,0,0.15)'} />
+        ))}
+      </View>
+      <Txt weight="bold" style={styles.diffChipText}>
+        {s.label}
       </Txt>
-      {prompt ? (
-        <View style={styles.promptChip}>
-          <Txt weight="semibold" style={styles.promptChipText}>
-            {prompt}
-          </Txt>
-        </View>
-      ) : null}
-      {onListen ? (
-        <Pressable onPress={onListen} hitSlop={8} accessibilityLabel="Ouvir a frase" style={styles.listen}>
-          <Txt style={{ fontSize: 20 }}>🔊</Txt>
+      <Coins value={REWARDS[difficulty]} prefix=" +" size={12} textStyle={styles.diffChipText} />
+    </View>
+  );
+}
+
+/** O caranguejo "fala" a frase da pergunta num balão. */
+function CrabSays({ question }) {
+  if (!question.prompt) return null;
+  const canSpeak = speakable(question);
+  return (
+    <View style={styles.says}>
+      <Crab size={86} color="#E0431B" />
+      <View style={styles.saysBubble}>
+        <View style={styles.saysTail} />
+        {canSpeak ? (
+          <Pressable
+            onPress={() => speech.speak(question.prompt)}
+            accessibilityRole="button"
+            accessibilityLabel="Ouvir a frase"
+            hitSlop={6}
+            style={({ pressed }) => [styles.speaker, pressed && { transform: [{ scale: 0.92 }] }]}
+          >
+            <SpeakerIcon size={20} color={colors.white} />
+          </Pressable>
+        ) : null}
+        <Txt weight="semibold" style={styles.saysText}>
+          {question.prompt}
+        </Txt>
+      </View>
+    </View>
+  );
+}
+
+/** "Ouça e escolha": o caranguejo fala a frase (sem mostrar o texto). */
+function ListenPrompt({ question }) {
+  useEffect(() => {
+    const t = setTimeout(() => speech.speak(question.prompt), 350);
+    return () => clearTimeout(t);
+  }, [question.id]);
+  return (
+    <View style={styles.says}>
+      <Crab size={86} color="#E0431B" />
+      <View style={[styles.saysBubble, styles.listenBubble]}>
+        <View style={styles.saysTail} />
+        <Pressable
+          onPress={() => speech.speak(question.prompt)}
+          accessibilityRole="button"
+          accessibilityLabel="Ouvir de novo"
+          style={({ pressed }) => [styles.listenBig, pressed && { transform: [{ scale: 0.94 }] }]}
+        >
+          <SpeakerIcon size={34} color={colors.white} />
         </Pressable>
-      ) : null}
+        <Pressable
+          onPress={() => speech.speak(question.prompt, { slow: true })}
+          accessibilityRole="button"
+          accessibilityLabel="Ouvir devagar"
+          style={({ pressed }) => [styles.listenSlow, pressed && { transform: [{ scale: 0.94 }] }]}
+        >
+          <SpeakerIcon size={20} color={colors.orangeDark} />
+          <Txt weight="bold" style={styles.listenSlowText}>
+            devagar
+          </Txt>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 // ------------------------------------------------------------ múltipla escolha
 
-function ChoiceQuestion({ question, options, picked, onPick }) {
-  const answered = picked !== null;
+function Options({ question, selected, checked, onSelect }) {
   return (
-    <>
-      <PromptPill label={question.question_text} prompt={question.prompt} />
-      <View style={styles.options}>
-        {options.map((option, i) => {
-          const isRight = option === question.correct_answer;
-          const isPicked = option === picked;
-          let state = null;
-          if (answered && isRight) state = styles.optionRight;
-          else if (answered && isPicked) state = styles.optionWrong;
-          return (
-            <Pressable
-              key={option}
-              disabled={answered}
-              onPress={() => onPick(option)}
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.option, state, pressed && { transform: [{ scale: 0.98 }] }]}
-            >
-              <Txt weight="semibold" style={[styles.optionText, state && { color: colors.white }]}>
-                {LETTERS[i]}) {option}
+    <View style={styles.options}>
+      {question.shuffled.map((option, i) => {
+        const isSelected = option === selected;
+        const isRight = option === question.correct_answer;
+        let state = isSelected ? 'selected' : null;
+        if (checked && isRight) state = 'right';
+        else if (checked && isSelected) state = 'wrong';
+        return (
+          <Pressable
+            key={option}
+            disabled={!!checked}
+            onPress={() => onSelect(option)}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: isSelected, disabled: !!checked }}
+            accessibilityLabel={`Alternativa ${LETTERS[i]}: ${option}`}
+            style={({ pressed, hovered, focused }) => [
+              styles.option,
+              hovered && !checked && !state && styles.optionHover,
+              state && styles[`option_${state}`],
+              checked && !state && { opacity: 0.55 },
+              pressed && styles.optionPressed,
+              focused && styles.focused,
+            ]}
+          >
+            <View style={[styles.letter, state && styles[`letter_${state}`]]}>
+              <Txt weight="bold" style={[styles.letterText, state && state !== 'selected' && { color: colors.white }]}>
+                {LETTERS[i]}
               </Txt>
-            </Pressable>
-          );
-        })}
-      </View>
-    </>
+            </View>
+            <Txt weight="semibold" style={[styles.optionText, state && styles[`optionText_${state}`]]}>
+              {option}
+            </Txt>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
 // ---------------------------------------------------------------------- voz
 
-function VoiceQuestion({ question, onResult, onSkip, disabled }) {
+function PulseRing({ active }) {
+  const reduced = useReducedMotion();
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!active || reduced) {
+      v.setValue(0);
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.timing(v, { toValue: 1, duration: 1100, easing: Easing.out(Easing.quad), useNativeDriver: NATIVE_DRIVER }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [active, reduced, v]);
+  if (!active) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.pulse,
+        {
+          opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+          transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] }) }],
+        },
+      ]}
+    />
+  );
+}
+
+function VoiceArea({ question, onResult, disabled }) {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState('');
   const availability = useMemo(() => speech.recognitionAvailable(), [question.id]);
@@ -96,11 +234,8 @@ function VoiceQuestion({ question, onResult, onSkip, disabled }) {
     setListening(true);
     try {
       const alternatives = await speech.listen();
-      if (!alternatives.length) {
-        setError('Não ouvi nada. Tente de novo, falando perto do microfone.');
-      } else {
-        onResult(alternatives);
-      }
+      if (!alternatives.length) setError('Não ouvi nada. Tente de novo, falando perto do microfone.');
+      else onResult(alternatives);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -108,152 +243,291 @@ function VoiceQuestion({ question, onResult, onSkip, disabled }) {
     }
   }
 
-  return (
-    <>
-      <PromptPill label={question.question_text} prompt={question.prompt} onListen={() => speech.speak(question.prompt)} />
-
-      {availability.ok ? (
-        <View style={styles.voiceArea}>
-          <Pressable
-            onPress={record}
-            disabled={listening || disabled}
-            accessibilityLabel="Gravar resposta"
-            style={({ pressed }) => [styles.mic, listening && styles.micActive, pressed && { transform: [{ scale: 0.95 }] }]}
-          >
-            {listening ? <ActivityIndicator color={colors.white} size="large" /> : <Txt style={styles.micIcon}>🎤</Txt>}
-          </Pressable>
-          <View style={styles.hintPill}>
-            <Txt weight="semibold" style={styles.hintText}>
-              {listening ? 'Ouvindo... fale agora!' : 'Aperte quando estiver pronto para falar!'}
-            </Txt>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.voiceArea}>
-          <View style={styles.hintPill}>
-            <Txt weight="semibold" style={styles.hintText}>
-              {availability.reason}
-            </Txt>
-          </View>
-          <Txt style={styles.voiceTip}>Toque em 🔊 para ouvir e repita em voz alta para treinar.</Txt>
-        </View>
-      )}
-
-      {error ? <Txt weight="semibold" style={styles.voiceError}>{error}</Txt> : null}
-
-      <Btn title="Pular pergunta (sem pontos)" variant="light" small onPress={onSkip} style={{ marginTop: 10 }} />
-    </>
-  );
-}
-
-// ------------------------------------------------------------------- pop-ups
-
-function FeedbackPopup({ feedback, isLast, onNext, onRetry }) {
-  const { correct, reward, alreadyEarned, said, kind, correctAnswer } = feedback;
-  return (
-    <Popup>
-      <Txt weight="bold" style={styles.feedbackTitle}>
-        {correct ? (kind === 'voice' ? 'Parabéns! Você acertou!' : 'Muito bem! Você acertou!') : 'Que pena! Você errou :('}
-      </Txt>
-      {said !== undefined ? <Txt style={styles.feedbackLine}>Você disse: “{said}”</Txt> : null}
-      {!correct ? <Txt style={styles.feedbackLine}>Resposta certa: {correctAnswer}</Txt> : null}
-      <Txt style={styles.feedbackLine}>
-        Recompensa: {reward} {COIN}
-        {correct && alreadyEarned ? '  (você já ganhou esta)' : ''}
-      </Txt>
-      <View style={styles.feedbackActions}>
-        {!correct && kind === 'voice' ? (
-          <Btn title="Tentar de novo" variant="light" small onPress={onRetry} style={{ marginRight: 8 }} />
-        ) : null}
-        <Pressable onPress={onNext} hitSlop={8}>
-          <Txt weight="semibold" style={styles.nextLink}>
-            {isLast ? 'Ver resultado ›' : 'Próxima questão ›'}
+  if (!availability.ok) {
+    return (
+      <View style={styles.voiceArea}>
+        <View style={styles.hintPill}>
+          <Txt weight="semibold" style={styles.hintText}>
+            {availability.reason}
           </Txt>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.voiceArea}>
+      <View style={styles.micWrap}>
+        <PulseRing active={listening} />
+        <Pressable
+          onPress={record}
+          disabled={listening || disabled}
+          accessibilityRole="button"
+          accessibilityLabel="Gravar resposta"
+          accessibilityState={{ busy: listening }}
+          style={({ pressed, focused }) => [styles.mic, listening && styles.micActive, pressed && styles.micPressed, focused && styles.focused]}
+        >
+          {listening ? <ActivityIndicator color={colors.white} size="large" /> : <MicIcon size={40} color={colors.white} />}
         </Pressable>
       </View>
-    </Popup>
+      <View style={styles.hintPill}>
+        <Txt weight="semibold" style={styles.hintText} accessibilityLiveRegion="polite">
+          {listening ? 'Ouvindo... fale agora!' : 'Toque no microfone e fale a frase'}
+        </Txt>
+      </View>
+      {error ? (
+        <Txt weight="semibold" style={styles.voiceError} accessibilityLiveRegion="polite">
+          {error}
+        </Txt>
+      ) : null}
+    </View>
   );
 }
 
-function SummaryPopup({ summary, onReplay, onExit }) {
-  const { correct, answered, coins, passed, newlyPassed, hasNext } = summary;
-  let headline = 'Continue praticando!';
-  if (answered > 0 && correct === answered) headline = 'Perfeito!';
-  else if (passed) headline = 'Muito bem!';
+// ------------------------------------------------------------- faixa de resultado
+
+function FeedbackSheet({ feedback, combo, onContinue, onRetry }) {
+  const reduced = useReducedMotion();
+  const y = useRef(new Animated.Value(reduced ? 0 : 1)).current;
+  useEffect(() => {
+    if (!reduced) Animated.timing(y, { toValue: 0, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: NATIVE_DRIVER }).start();
+  }, [reduced, y]);
+
+  const { correct, reward, alreadyEarned, said, kind, correctAnswer, praise, heard } = feedback;
+  const tone = correct ? styles.sheetRight : styles.sheetWrong;
+  const ink = correct ? colors.correctDark : colors.wrongDark;
 
   return (
-    <Popup style={{ alignItems: 'center' }}>
-      <Title style={{ marginBottom: 10 }}>Fase finalizada!</Title>
-      <Txt style={styles.summaryLine}>
-        <Txt weight="bold">{headline}</Txt> Você acertou {correct}/{answered} pergunta{answered === 1 ? '' : 's'}.
-      </Txt>
-      <Txt style={styles.summaryLine}>
-        Recompensa total: <Txt weight="bold">{coins} {COIN}</Txt>
-      </Txt>
-      {newlyPassed && hasNext ? (
-        <Txt weight="bold" style={[styles.summaryLine, { color: '#1E8E3E' }]}>🎉 Próxima fase desbloqueada!</Txt>
-      ) : null}
-      {!passed ? (
-        <Txt style={[styles.summaryLine, { color: colors.muted, fontSize: 13 }]}>
-          Acerte pelo menos {summary.needed} perguntas da fase para avançar.
-        </Txt>
-      ) : null}
-      <View style={{ flexDirection: 'row', marginTop: 14 }}>
-        <Btn title="Jogar de novo" variant="light" onPress={onReplay} style={{ marginRight: 10 }} />
-        <Btn title="Menu" onPress={onExit} />
+    <Animated.View
+      accessibilityLiveRegion="assertive"
+      style={[styles.sheet, tone, { transform: [{ translateY: y.interpolate({ inputRange: [0, 1], outputRange: [0, 260] }) }] }]}
+    >
+      <View style={styles.sheetInner}>
+        <View style={styles.sheetHead}>
+          <View style={[styles.sheetIcon, { backgroundColor: ink }]}>
+            {correct ? <CheckIcon size={24} color={colors.white} strokeWidth={3.4} /> : <CrossIcon size={24} color={colors.white} strokeWidth={3.4} />}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Txt weight="bold" style={[styles.sheetTitle, { color: ink }]}>
+              {correct ? praise : 'Resposta correta:'}
+            </Txt>
+            {!correct ? (
+              <Txt weight="semibold" style={[styles.sheetAnswer, { color: ink }]}>
+                {correctAnswer}
+              </Txt>
+            ) : null}
+          </View>
+          {correct && reward > 0 ? <Coins value={reward} prefix="+" size={18} textStyle={{ color: ink }} /> : null}
+        </View>
+        {said !== undefined ? <Txt style={[styles.sheetLine, { color: ink }]}>Você disse: “{said}”</Txt> : null}
+        {correct && combo >= 3 ? (
+          <View style={styles.sheetCombo}>
+            <FlameIcon size={16} />
+            <Txt weight="bold" style={[styles.sheetLine, { color: ink, marginLeft: 4 }]}>
+              {combo} acertos seguidos!
+            </Txt>
+          </View>
+        ) : null}
+        {correct && alreadyEarned ? <Txt style={[styles.sheetLine, { color: ink }]}>As moedas desta pergunta já eram suas.</Txt> : null}
+        {kind === 'listen' ? <Txt style={[styles.sheetLine, { color: ink }]}>A frase era: “{heard}”</Txt> : null}
+        <View style={styles.sheetActions}>
+          {!correct && kind === 'voice' ? (
+            <Btn title="Tentar de novo" variant="light" onPress={onRetry} style={styles.sheetButton} />
+          ) : null}
+          <Btn title="CONTINUAR" variant={correct ? 'success' : 'danger'} onPress={onContinue} style={styles.sheetButton} />
+        </View>
       </View>
-    </Popup>
+    </Animated.View>
+  );
+}
+
+// ------------------------------------------------------------- telas finais
+
+function StreakScreen({ before, after, week, onContinue }) {
+  return (
+    <GameBackground>
+      <View style={styles.endFill}>
+        <FlameIcon size={140} />
+        <Txt weight="bold" style={styles.streakNumber}>
+          {after.current}
+        </Txt>
+        <Txt weight="bold" style={styles.endTitle}>
+          {after.current === 1 ? 'dia de ofensiva!' : 'dias de ofensiva!'}
+        </Txt>
+        <Txt style={styles.endText}>
+          {before.current === 0
+            ? 'Você acendeu seu primeiro foguinho. Volte amanhã para ele continuar aceso!'
+            : 'Você manteve o foguinho aceso. Continue jogando todo dia!'}
+        </Txt>
+        <View style={styles.weekCard}>
+          <StreakWeek week={week} />
+        </View>
+      </View>
+      <View style={styles.endFooter}>
+        <Btn title="CONTINUAR" variant="menu" onPress={onContinue} style={styles.endButton} textStyle={{ color: colors.orangeDark }} />
+      </View>
+    </GameBackground>
+  );
+}
+
+function StatCard({ label, color, icon, children }) {
+  return (
+    <View style={[styles.stat, { borderColor: color }]}>
+      <View style={[styles.statLabel, { backgroundColor: color }]}>
+        <Txt weight="bold" style={styles.statLabelText}>
+          {label}
+        </Txt>
+      </View>
+      <View style={styles.statBody}>
+        {icon}
+        {children}
+      </View>
+    </View>
+  );
+}
+
+function SummaryScreen({ summary, onNextRound, onNextPhase, onExit }) {
+  const { firstTry, answered, coins, before, after, streak, phase, phaseDone, phaseCompleted, nextPhase } = summary;
+  const accuracy = answered ? Math.round((firstTry / answered) * 100) : 0;
+  const leveledUp = after.level > before.level;
+  const newTier = after.tier.title !== before.tier.title;
+  const title = phaseCompleted ? 'Fase concluída!' : accuracy === 100 && answered ? 'Rodada perfeita!' : 'Rodada completa!';
+  const diff = DIFFICULTY_STYLES[phase.difficulty];
+
+  return (
+    <GameBackground>
+      <ScrollView contentContainerStyle={styles.endFill}>
+        <Crab size={120} color="#E0431B" />
+        <Txt weight="bold" style={styles.endTitle}>
+          {title}
+        </Txt>
+        <View style={styles.stats}>
+          <StatCard label="MOEDAS" color="#D9A300">
+            <Coins value={coins} prefix="+" size={20} />
+          </StatCard>
+          <StatCard label="PRECISÃO" color={colors.correctDark} icon={<TargetIcon size={18} color={colors.correctDark} />}>
+            <Txt weight="bold" style={styles.statValue}>
+              {accuracy}%
+            </Txt>
+          </StatCard>
+          <StatCard label="OFENSIVA" color="#E8650F" icon={<FlameIcon size={20} />}>
+            <Txt weight="bold" style={styles.statValue}>
+              {streak.current}
+            </Txt>
+          </StatCard>
+        </View>
+
+        <View style={styles.levelCard}>
+          <Txt weight="bold" style={{ fontSize: 14 }}>
+            Fase {phase.number} · {phase.module.title} · {diff.label}
+          </Txt>
+          <View style={styles.levelTrack}>
+            <View style={[styles.levelFill, { width: `${Math.round((phaseDone / phase.total) * 100)}%`, backgroundColor: colors.correctDark }]} />
+          </View>
+          <Txt style={styles.levelHint}>
+            {phaseCompleted
+              ? nextPhase
+                ? `Nova fase liberada: ${nextPhase.module.title} · ${DIFFICULTY_STYLES[nextPhase.difficulty].label}`
+                : 'Você concluiu todas as fases!'
+              : `${phaseDone} de ${phase.total} perguntas da fase`}
+          </Txt>
+        </View>
+
+        {leveledUp ? (
+          <View style={styles.levelUp}>
+            <StarIcon size={30} />
+            <View style={{ flex: 1, marginLeft: space.sm }}>
+              <Txt weight="bold" style={styles.levelUpTitle}>
+                Você subiu para o nível {after.level}!
+              </Txt>
+              {newTier ? (
+                <Txt style={styles.levelUpText}>
+                  Novo título: <Txt weight="bold">{after.tier.title}</Txt>
+                </Txt>
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.row, { marginTop: space.md }]}>
+            <Txt style={styles.endHint}>Nível {after.level} · faltam </Txt>
+            <Coins value={after.remaining} size={13} textStyle={{ color: colors.white }} />
+            <Txt style={styles.endHint}> para o nível {after.level + 1}</Txt>
+          </View>
+        )}
+      </ScrollView>
+      <View style={styles.endFooter}>
+        {!phaseCompleted ? (
+          <Btn title="PRÓXIMA RODADA" variant="menu" onPress={onNextRound} style={styles.endButton} textStyle={{ color: colors.orangeDark }} />
+        ) : nextPhase ? (
+          <Btn title="PRÓXIMA FASE" variant="menu" onPress={onNextPhase} style={styles.endButton} textStyle={{ color: colors.orangeDark }} />
+        ) : null}
+        <Btn title="Voltar à trilha" variant="light" small onPress={onExit} style={[styles.endButton, { marginTop: space.sm }]} />
+      </View>
+    </GameBackground>
   );
 }
 
 // ---------------------------------------------------------------------- tela
 
-export default function GameScreen({ user, difficulty, onExit }) {
+export default function GameScreen({ user, phaseId, onExit }) {
+  const [activePhaseId, setActivePhaseId] = useState(phaseId);
   const [phase, setPhase] = useState(undefined); // undefined = carregando, null = sem conteúdo
-  const [index, setIndex] = useState(0);
-  const [picked, setPicked] = useState(null);
+  const [blocked, setBlocked] = useState(null); // 'locked' | 'done' quando não há o que jogar
+  const [queue, setQueue] = useState([]); // perguntas desta rodada, na ordem do conteúdo
+  const [pos, setPos] = useState(0);
+  const [selected, setSelected] = useState(null);
   const [feedback, setFeedback] = useState(null);
-  const [summary, setSummary] = useState(null);
+  const [combo, setCombo] = useState(0);
+  const [end, setEnd] = useState(null); // { stage: 'streak' | 'summary', summary }
   const [confirmExit, setConfirmExit] = useState(false);
   const [round, setRound] = useState(0);
 
   const earned = useRef(new Set()); // perguntas já acertadas (servidor + local)
-  const results = useRef([]); // { correct, reward, skipped }
-  const passedBefore = useRef(false);
+  const results = useRef(new Map()); // id -> { firstTry, correct, reward, skipped }
+  const start = useRef({ coins: 0, days: new Set(), seen: new Set(), phases: [] });
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [modules, activities, earnedIds] = await Promise.all([
+      const [modules, activities, earnedIds, days, seen] = await Promise.all([
         db.getModules(),
         db.getActivities(),
         db.getEarnedIds(user.id),
+        session.loadActiveDays(user.id),
+        session.loadSeen(user.id),
       ]);
       if (!alive) return;
-      const chosen = pickPhase(modules, activities, earnedIds, difficulty);
-      earned.current = earnedIds;
-      results.current = [];
-      if (chosen) {
-        passedBefore.current = phasePassed(chosen.earned, chosen.questions.length);
-        chosen.hasNext = modules.some(m => m.order_index > chosen.module.order_index);
-        chosen.questions = chosen.questions.map(q => ({ ...q, shuffled: shuffle(q.options) }));
-      }
-      setPhase(chosen);
-      setIndex(0);
-      setPicked(null);
+      const coins = coinsFor(earnedIds, new Map(activities.map(a => [a.id, a])));
+      const phases = phaseProgress(buildPhases(modules, activities, session.deviceAbilities()), seen);
+      const chosen = phases.find(p => p.id === activePhaseId) ?? phases.find(p => p.state === 'current') ?? null;
+      start.current = { coins, days, seen, phases };
+      earned.current = new Set(earnedIds);
+      results.current = new Map();
+      // Nunca repete: só entram perguntas que o aluno ainda não viu, na ordem da fase.
+      const questions = chosen && chosen.state !== 'locked' ? nextQuestions(chosen, seen) : [];
+      if (!chosen) setBlocked(phases.length ? 'all' : null);
+      else setBlocked(chosen.state === 'locked' ? 'locked' : questions.length ? null : 'done');
+      setPhase(phases.length ? chosen : null);
+      setQueue(questions.map(q => ({ q: { ...q, shuffled: shuffle(q.options) } })));
+      setPos(0);
+      setSelected(null);
       setFeedback(null);
-      setSummary(null);
+      setCombo(0);
+      setEnd(null);
     })();
     return () => {
       alive = false;
     };
-  }, [user.id, difficulty, round]);
+  }, [user.id, activePhaseId, round]);
 
   if (phase === undefined) {
     return (
       <GameBackground>
         <View style={styles.centerFill}>
           <ActivityIndicator color={colors.white} size="large" />
+          <Txt weight="semibold" style={styles.loadingText}>
+            Preparando a rodada...
+          </Txt>
         </View>
       </GameBackground>
     );
@@ -262,21 +536,65 @@ export default function GameScreen({ user, difficulty, onExit }) {
   if (phase === null) {
     return (
       <GameBackground>
-        <BackButton onPress={onExit} color={colors.white} />
         <View style={styles.centerFill}>
-          <Popup>
-            <Txt weight="bold" style={styles.feedbackTitle}>Ainda não há fases neste aparelho.</Txt>
-            <Txt style={styles.feedbackLine}>Conecte-se à internet uma vez para baixar o conteúdo.</Txt>
-            <Btn title="Voltar" onPress={onExit} style={{ marginTop: 12 }} />
+          <Popup style={{ alignItems: 'center' }}>
+            <Crab size={72} color="#E0431B" style={{ marginBottom: space.sm }} />
+            <Txt weight="bold" style={styles.popupTitle}>Ainda não há perguntas neste aparelho.</Txt>
+            <Txt style={styles.popupLine}>Conecte-se à internet uma vez para baixar o conteúdo.</Txt>
+            <Btn title="Voltar" onPress={onExit} style={{ marginTop: space.md }} />
           </Popup>
         </View>
       </GameBackground>
     );
   }
 
-  const questions = phase.questions;
-  const question = questions[index];
-  const isLast = index === questions.length - 1;
+  if (blocked) {
+    return (
+      <GameBackground>
+        <View style={styles.centerFill}>
+          <Popup style={{ alignItems: 'center' }}>
+            <Crab size={72} color="#E0431B" style={{ marginBottom: space.sm }} />
+            <Txt weight="bold" style={styles.popupTitle}>
+              {blocked === 'locked' ? 'Esta fase ainda está trancada.' : blocked === 'all' ? 'Você concluiu todas as fases!' : 'Você já concluiu esta fase!'}
+            </Txt>
+            <Txt style={styles.popupLine}>
+              {blocked === 'locked'
+                ? 'Conclua a fase anterior para liberar esta.'
+                : blocked === 'all'
+                  ? 'Parabéns! Novas perguntas chegam nas próximas atualizações.'
+                  : 'As perguntas não se repetem. Siga para a próxima fase da trilha.'}
+            </Txt>
+            <Btn title="Voltar à trilha" onPress={onExit} style={{ marginTop: space.md }} />
+          </Popup>
+        </View>
+      </GameBackground>
+    );
+  }
+
+  if (end?.stage === 'streak') {
+    return (
+      <StreakScreen
+        before={end.summary.streakBefore}
+        after={end.summary.streak}
+        week={end.summary.week}
+        onContinue={() => setEnd({ ...end, stage: 'summary' })}
+      />
+    );
+  }
+  if (end?.stage === 'summary') {
+    return (
+      <SummaryScreen
+        summary={end.summary}
+        onNextRound={() => setRound(r => r + 1)}
+        onNextPhase={() => setActivePhaseId(end.summary.nextPhase.id)}
+        onExit={onExit}
+      />
+    );
+  }
+
+  const entry = queue[pos];
+  const question = entry.q;
+  const progress = (pos + (feedback ? 1 : 0)) / queue.length;
 
   async function registerAnswer(answer, extra = {}) {
     const correct = isCorrect(question.kind, answer, question.correct_answer);
@@ -294,17 +612,25 @@ export default function GameScreen({ user, difficulty, onExit }) {
     });
     if (correct) earned.current.add(question.id);
 
-    // Numa nova tentativa de voz, vale o melhor resultado da pergunta.
-    const prev = results.current[index];
-    if (!prev || prev.skipped || (!prev.correct && correct)) {
-      results.current[index] = { correct, reward: (prev?.reward ?? 0) + reward, skipped: false };
-    }
-    setFeedback({ correct, reward, alreadyEarned, kind: question.kind, correctAnswer: question.correct_answer, ...extra });
+    const prev = results.current.get(question.id);
+    if (!prev || prev.skipped) results.current.set(question.id, { firstTry: correct, correct, reward, skipped: false });
+    else results.current.set(question.id, { ...prev, correct: prev.correct || correct, reward: prev.reward + reward });
+
+    setCombo(c => (correct ? c + 1 : 0));
+    setFeedback({
+      correct,
+      reward,
+      alreadyEarned,
+      kind: question.kind,
+      correctAnswer: question.correct_answer,
+      praise: PRAISE[Math.floor(Math.random() * PRAISE.length)],
+      heard: question.prompt,
+      ...extra,
+    });
   }
 
-  function pickOption(option) {
-    setPicked(option);
-    registerAnswer(option);
+  function check() {
+    if (selected !== null) registerAnswer(selected);
   }
 
   function voiceResult(alternatives) {
@@ -314,75 +640,99 @@ export default function GameScreen({ user, difficulty, onExit }) {
 
   function skip() {
     speech.stopListening();
-    if (!results.current[index]) results.current[index] = { correct: false, reward: 0, skipped: true };
-    advance();
-  }
-
-  function advance() {
-    setFeedback(null);
-    setPicked(null);
-    if (!isLast) {
-      setIndex(index + 1);
-      return;
+    session.markSkipped(user.id, question.id);
+    if (!results.current.has(question.id)) {
+      results.current.set(question.id, { firstTry: false, correct: false, reward: 0, skipped: true });
     }
-    const done = results.current.filter(r => r && !r.skipped);
-    const phaseEarned = questions.filter(q => earned.current.has(q.id)).length;
-    const passed = phasePassed(phaseEarned, questions.length);
-    setSummary({
-      correct: done.filter(r => r.correct).length,
-      answered: done.length,
-      coins: results.current.reduce((sum, r) => sum + (r?.reward ?? 0), 0),
-      passed,
-      newlyPassed: passed && !passedBefore.current,
-      hasNext: phase.hasNext,
-      needed: Math.ceil(questions.length * PASS_RATIO),
-    });
+    next();
   }
 
-  const diff = DIFFICULTY_STYLES[difficulty];
+  function finish() {
+    const all = [...results.current.values()];
+    const answered = all.filter(r => !r.skipped);
+    const coins = all.reduce((sum, r) => sum + r.reward, 0);
+    const days = new Set(start.current.days);
+    if (answered.length) days.add(dayKey());
+    const streakBefore = streakInfo(start.current.days);
+    const streak = streakInfo(days);
+    const seenAfter = new Set([...start.current.seen, ...results.current.keys()]);
+    const phaseDone = phase.questions.filter(q => seenAfter.has(q.id)).length;
+    const index = start.current.phases.findIndex(p => p.id === phase.id);
+    const summary = {
+      phase,
+      phaseDone,
+      phaseCompleted: phaseDone >= phase.total,
+      nextPhase: start.current.phases[index + 1] ?? null,
+      firstTry: answered.filter(r => r.firstTry).length,
+      answered: answered.length,
+      coins,
+      before: levelInfo(start.current.coins),
+      after: levelInfo(start.current.coins + coins),
+      streakBefore,
+      streak,
+      week: lastWeek(days),
+    };
+    // Primeira rodada do dia: comemora o foguinho antes do resumo.
+    setEnd({ stage: streak.activeToday && !streakBefore.activeToday ? 'streak' : 'summary', summary });
+  }
+
+  function next() {
+    setFeedback(null);
+    setSelected(null);
+    if (pos + 1 < queue.length) setPos(pos + 1);
+    else finish();
+  }
 
   return (
     <GameBackground>
-      <BackButton onPress={() => setConfirmExit(true)} color={colors.white} />
-      <View style={[styles.phaseTag, { backgroundColor: diff.color, borderColor: diff.border }]}>
-        <Txt weight="bold" style={{ fontSize: 12 }}>
-          Fase {phase.number} · {phase.module.title} · {diff.label}
-        </Txt>
-      </View>
+      <LessonTop progress={progress} combo={combo} onClose={() => setConfirmExit(true)} />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <QuestionHeader number={index + 1} total={questions.length} />
+        <View style={styles.questionHead}>
+          <View style={styles.row}>
+            <DifficultyChip difficulty={question.difficulty} />
+          </View>
+          <Txt weight="bold" style={styles.questionTitle} accessibilityRole="header">
+            {question.kind === 'voice' ? 'Fale esta frase em francês' : question.question_text}
+          </Txt>
+        </View>
+
+        {question.kind === 'listen' ? <ListenPrompt question={question} /> : <CrabSays question={question} />}
+
         {question.kind === 'voice' ? (
-          <VoiceQuestion
-            key={`${question.id}-${index}`}
-            question={question}
-            onResult={voiceResult}
-            onSkip={skip}
-            disabled={!!feedback}
-          />
+          <VoiceArea key={`${question.id}-${pos}`} question={question} onResult={voiceResult} disabled={!!feedback} />
         ) : (
-          <ChoiceQuestion question={question} options={question.shuffled} picked={picked} onPick={pickOption} />
+          <Options question={question} selected={selected} checked={feedback} onSelect={setSelected} />
         )}
       </ScrollView>
 
-      {feedback ? (
-        <FeedbackPopup feedback={feedback} isLast={isLast} onNext={advance} onRetry={() => setFeedback(null)} />
-      ) : null}
-
-      {summary ? <SummaryPopup summary={summary} onReplay={() => setRound(r => r + 1)} onExit={onExit} /> : null}
+      {!feedback ? (
+        <View style={styles.footer}>
+          {question.kind === 'voice' ? (
+            <Btn title="NÃO POSSO FALAR AGORA" variant="light" onPress={skip} style={styles.footerButton} />
+          ) : (
+            <Btn title="VERIFICAR" variant="success" disabled={selected === null} onPress={check} style={styles.footerButton} />
+          )}
+        </View>
+      ) : (
+        <FeedbackSheet feedback={feedback} combo={combo} onContinue={next} onRetry={() => setFeedback(null)} />
+      )}
 
       {confirmExit ? (
         <Popup style={{ alignItems: 'center' }}>
-          <Txt weight="bold" style={styles.feedbackTitle}>Sair da fase?</Txt>
-          <Txt style={styles.feedbackLine}>As respostas que você já deu ficam salvas.</Txt>
-          <View style={{ flexDirection: 'row', marginTop: 14 }}>
-            <Btn title="Continuar" variant="light" onPress={() => setConfirmExit(false)} style={{ marginRight: 10 }} />
+          <Crab size={64} color="#E0431B" style={{ marginBottom: space.sm }} />
+          <Txt weight="bold" style={styles.popupTitle}>Sair da rodada?</Txt>
+          <Txt style={styles.popupLine}>As respostas que você já deu ficam salvas.</Txt>
+          <View style={styles.popupActions}>
+            <Btn title="Continuar jogando" onPress={() => setConfirmExit(false)} style={styles.popupButton} />
             <Btn
               title="Sair"
+              variant="light"
               onPress={() => {
                 speech.stopListening();
                 onExit();
               }}
+              style={styles.popupButton}
             />
           </View>
         </Popup>
@@ -392,67 +742,275 @@ export default function GameScreen({ user, difficulty, onExit }) {
 }
 
 const styles = StyleSheet.create({
-  centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
-  content: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingTop: 54, paddingBottom: 24 },
-  phaseTag: {
-    position: 'absolute',
-    top: 14,
-    right: 12,
-    zIndex: 5,
-    borderWidth: 1.5,
-    borderRadius: 999,
+  centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg },
+  loadingText: { color: colors.white, marginTop: space.md, fontSize: 15 },
+  focused: { outlineWidth: 3, outlineColor: colors.focus, outlineStyle: 'solid', outlineOffset: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+
+  // topo
+  top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.md, paddingTop: space.md, paddingBottom: space.sm },
+  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  track: {
+    flex: 1,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    overflow: 'hidden',
+    marginHorizontal: space.sm,
+  },
+  trackFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.gold, borderRadius: 9 },
+  trackShine: { position: 'absolute', left: 8, right: 8, top: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.5)' },
+  combo: { flexDirection: 'row', alignItems: 'center', minWidth: 44, justifyContent: 'center' },
+  comboText: { color: colors.white, fontSize: 16, marginLeft: 2 },
+
+  // pergunta
+  content: { flexGrow: 1, alignItems: 'center', paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: 140 },
+  questionHead: { width: '100%', maxWidth: 480, alignItems: 'flex-start', marginBottom: space.sm },
+  questionTitle: {
+    color: colors.white,
+    fontSize: 22,
+    marginTop: space.sm,
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
+  },
+  diffChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 3,
   },
-  header: { alignItems: 'center', marginBottom: 14 },
-  headerCrab: { marginBottom: -10, zIndex: 2 },
-  headerCard: { backgroundColor: colors.card, paddingHorizontal: 30, paddingVertical: 8, minWidth: 200, alignItems: 'center' },
-  headerText: { fontSize: 22 },
-  promptPill: {
+  diffChipText: { fontSize: 12, color: colors.ink },
+  says: { flexDirection: 'row', alignItems: 'flex-end', width: '100%', maxWidth: 480, marginVertical: space.md },
+  saysBubble: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 999,
-    paddingVertical: 5,
-    paddingLeft: 16,
-    paddingRight: 5,
-    borderWidth: 2,
-    borderColor: colors.white,
-    maxWidth: 640,
-    marginBottom: 14,
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderBottomWidth: 4,
+    borderBottomColor: colors.whiteShadow,
+    paddingVertical: space.md,
+    paddingHorizontal: space.md,
+    marginLeft: space.sm,
+    marginBottom: space.md,
   },
-  promptLabel: { fontSize: 14, marginRight: 10, paddingVertical: 6 },
-  promptChip: { backgroundColor: colors.orangeDark, borderRadius: 999, paddingHorizontal: 22, paddingVertical: 7, flexShrink: 1 },
-  promptChipText: { color: colors.white, fontSize: 17 },
-  listen: { marginLeft: 6, padding: 4 },
-  options: { width: '100%', maxWidth: 300, alignItems: 'stretch' },
-  option: { backgroundColor: colors.card, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 16, marginBottom: 8 },
-  optionRight: { backgroundColor: colors.correct },
-  optionWrong: { backgroundColor: colors.wrong },
-  optionText: { fontSize: 14 },
-  voiceArea: { alignItems: 'center', marginTop: 4 },
-  mic: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+  saysTail: {
+    position: 'absolute',
+    left: -7,
+    bottom: 16,
+    width: 16,
+    height: 16,
+    backgroundColor: colors.white,
+    transform: [{ rotate: '45deg' }],
+  },
+  speaker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.orangeDark,
-    borderWidth: 4,
-    borderColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginRight: space.sm,
+  },
+  saysText: { fontSize: 19, color: colors.ink, flexShrink: 1 },
+  listenBubble: { justifyContent: 'center', paddingVertical: space.lg },
+  listenBig: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.orangeDark,
+    borderBottomWidth: 5,
+    borderBottomColor: colors.orangeShadow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listenSlow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+    marginLeft: space.md,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.orangeDark,
+  },
+  listenSlowText: { color: colors.orangeDark, marginLeft: 4, fontSize: 14 },
+
+  // alternativas
+  options: { width: '100%', maxWidth: 480 },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 56,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.card,
+    borderBottomWidth: 5,
+    borderBottomColor: colors.cardShadow,
+    paddingVertical: space.sm,
+    paddingLeft: space.sm,
+    paddingRight: space.lg,
+    marginBottom: space.sm + 2,
+  },
+  optionHover: { backgroundColor: colors.white, borderColor: colors.white },
+  optionPressed: { transform: [{ translateY: 2 }] },
+  option_selected: { backgroundColor: '#FFF1E6', borderColor: colors.orangeDark, borderBottomColor: colors.orangeDark },
+  option_right: { backgroundColor: '#D7F5DF', borderColor: colors.correctDark, borderBottomColor: colors.correctDark },
+  option_wrong: { backgroundColor: '#FDE2E2', borderColor: colors.wrongDark, borderBottomColor: colors.wrongDark },
+  letter: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: space.md,
+  },
+  letter_selected: { borderColor: colors.orangeDark },
+  letter_right: { backgroundColor: colors.correctDark, borderColor: colors.correctDark },
+  letter_wrong: { backgroundColor: colors.wrongDark, borderColor: colors.wrongDark },
+  letterText: { color: colors.muted, fontSize: 14, marginTop: -1 },
+  optionText: { fontSize: 17, flexShrink: 1 },
+  optionText_selected: { color: colors.orangeDark },
+  optionText_right: { color: colors.correctDark },
+  optionText_wrong: { color: colors.wrongDark },
+
+  // voz
+  voiceArea: { alignItems: 'center', marginTop: space.xs },
+  micWrap: { width: 112, height: 112, alignItems: 'center', justifyContent: 'center', marginBottom: space.md },
+  pulse: { position: 'absolute', width: 100, height: 100, borderRadius: 50, backgroundColor: colors.white },
+  mic: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.orangeDark,
+    borderWidth: 5,
+    borderColor: colors.white,
+    borderBottomWidth: 8,
+    borderBottomColor: colors.whiteShadow,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   micActive: { backgroundColor: colors.wrong },
-  micIcon: { fontSize: 38 },
-  hintPill: { backgroundColor: colors.white, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 6, maxWidth: 420 },
-  hintText: { fontSize: 13, textAlign: 'center' },
-  voiceTip: { color: colors.white, fontSize: 12, marginTop: 8, textAlign: 'center' },
-  voiceError: { color: colors.white, marginTop: 10, textAlign: 'center', backgroundColor: 'rgba(0,0,0,0.3)', padding: 6, borderRadius: 8 },
-  feedbackTitle: { fontSize: 18, textAlign: 'center', marginBottom: 8 },
-  feedbackLine: { fontSize: 15, textAlign: 'center', marginBottom: 4 },
-  feedbackActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 14 },
-  nextLink: { fontSize: 14, color: colors.ink },
-  summaryLine: { fontSize: 15, textAlign: 'center', marginBottom: 6 },
+  micPressed: { transform: [{ scale: 0.95 }] },
+  hintPill: { backgroundColor: colors.white, borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm, maxWidth: 420 },
+  hintText: { fontSize: 14, textAlign: 'center' },
+  voiceError: {
+    color: colors.white,
+    marginTop: space.md,
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.sm,
+    maxWidth: 420,
+  },
+
+  // rodapé e faixa de resultado
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    borderTopWidth: 2,
+    borderTopColor: 'rgba(0,0,0,0.15)',
+  },
+  footerButton: { width: '100%', maxWidth: 480 },
+  sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.lg,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    zIndex: 30,
+  },
+  sheetRight: { backgroundColor: '#D7F5DF' },
+  sheetWrong: { backgroundColor: '#FDE2E2' },
+  sheetInner: { width: '100%', maxWidth: 480 },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', marginBottom: space.sm },
+  sheetIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: space.md },
+  sheetTitle: { fontSize: 22 },
+  sheetAnswer: { fontSize: 17 },
+  sheetLine: { fontSize: 14, marginBottom: 2 },
+  sheetCombo: { flexDirection: 'row', alignItems: 'center' },
+  sheetActions: { flexDirection: 'row', marginTop: space.md },
+  sheetButton: { flex: 1, marginHorizontal: space.xs },
+
+  // telas finais
+  endFill: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg, paddingBottom: 150 },
+  endTitle: {
+    color: colors.white,
+    fontSize: 28,
+    textAlign: 'center',
+    marginTop: space.sm,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
+  },
+  endHint: { color: colors.white, fontSize: 13 },
+  endText: { color: colors.white, fontSize: 15, textAlign: 'center', marginTop: space.sm, maxWidth: 380 },
+  streakNumber: {
+    color: colors.white,
+    fontSize: 72,
+    marginTop: -16,
+    textShadowColor: colors.orangeShadow,
+    textShadowOffset: { width: 0, height: 5 },
+    textShadowRadius: 0,
+  },
+  weekCard: { width: '100%', maxWidth: 380, backgroundColor: colors.white, borderRadius: radius.lg, padding: space.lg, marginTop: space.xl },
+  endFooter: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', padding: space.lg },
+  endButton: { width: '100%', maxWidth: 480 },
+  stats: { flexDirection: 'row', justifyContent: 'center', width: '100%', maxWidth: 480, marginTop: space.xl },
+  stat: { flex: 1, marginHorizontal: 5, borderWidth: 3, borderRadius: radius.md, backgroundColor: colors.white, overflow: 'hidden' },
+  statLabel: { paddingVertical: 4, alignItems: 'center' },
+  statLabelText: { color: colors.white, fontSize: 11, letterSpacing: 0.8 },
+  statBody: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: space.md },
+  statValue: { fontSize: 20, marginLeft: 4 },
+  levelUp: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 480,
+    backgroundColor: '#FFF4CC',
+    borderColor: colors.gold,
+    borderWidth: 3,
+    borderRadius: radius.md,
+    padding: space.md,
+    marginTop: space.lg,
+  },
+  levelUpTitle: { fontSize: 16, color: colors.orangeDark },
+  levelUpText: { fontSize: 13, marginTop: 2 },
+  levelCard: {
+    width: '100%',
+    maxWidth: 480,
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    padding: space.md,
+    marginTop: space.lg,
+    alignItems: 'center',
+  },
+  levelTrack: { width: '100%', height: 10, borderRadius: 5, backgroundColor: colors.line, overflow: 'hidden', marginVertical: space.sm },
+  levelFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.gold, borderRadius: 5 },
+  levelHint: { fontSize: 12, color: colors.muted },
+
+  // pop-ups
+  popupTitle: { fontSize: 20, textAlign: 'center', marginBottom: space.sm },
+  popupLine: { fontSize: 15, textAlign: 'center', marginBottom: space.xs },
+  popupActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: space.md },
+  popupButton: { marginHorizontal: space.xs, marginVertical: space.xs },
 });

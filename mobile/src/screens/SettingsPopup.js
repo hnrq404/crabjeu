@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AvatarIcon } from '../components/art';
+import { LogoutIcon } from '../components/icons';
 import { BackButton, Btn, Field, Message, Popup, Title, Txt } from '../components/ui';
 import * as session from '../session';
-import { AVATARS, colors } from '../theme';
+import { AVATARS, colors, radius, space } from '../theme';
 
 const TABS = [
   { key: 'avatar', label: 'Avatar' },
@@ -12,7 +13,7 @@ const TABS = [
   { key: 'password', label: 'Senha' },
 ];
 
-export default function SettingsPopup({ user, onClose, onUserChange }) {
+export default function SettingsPopup({ user, onClose, onUserChange, onLogout }) {
   const [tab, setTab] = useState('avatar');
   const [avatar, setAvatar] = useState(user.avatar_key || 'crab');
   const [username, setUsername] = useState(user.username);
@@ -61,20 +62,23 @@ export default function SettingsPopup({ user, onClose, onUserChange }) {
       <BackButton onPress={onClose} />
       <Title style={{ marginBottom: 12 }}>CONFIGURAÇÕES</Title>
 
-      <View style={styles.tabs}>
-        {TABS.map((t, i) => (
-          <Pressable
-            key={t.key}
-            onPress={() => changeTab(t.key)}
-            style={[styles.tab, i > 0 && styles.tabDivider]}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: tab === t.key }}
-          >
-            <Txt weight={tab === t.key ? 'bold' : 'regular'} style={{ color: tab === t.key ? colors.orange : colors.ink }}>
-              {t.label}
-            </Txt>
-          </Pressable>
-        ))}
+      <View style={styles.tabs} accessibilityRole="tablist">
+        {TABS.map(t => {
+          const active = tab === t.key;
+          return (
+            <Pressable
+              key={t.key}
+              onPress={() => changeTab(t.key)}
+              style={({ focused }) => [styles.tab, active && styles.tabActive, focused && styles.focused]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+            >
+              <Txt weight={active ? 'bold' : 'semibold'} style={{ color: active ? colors.white : colors.ink, fontSize: 15 }}>
+                {t.label}
+              </Txt>
+            </Pressable>
+          );
+        })}
       </View>
 
       <View style={styles.body}>
@@ -84,10 +88,17 @@ export default function SettingsPopup({ user, onClose, onUserChange }) {
               <Pressable
                 key={a.key}
                 onPress={() => setAvatar(a.key)}
+                accessibilityRole="radio"
                 accessibilityLabel={`Avatar ${a.key}`}
-                style={[styles.avatar, avatar === a.key && styles.avatarSelected]}
+                accessibilityState={{ checked: avatar === a.key }}
+                style={({ pressed, focused }) => [
+                  styles.avatar,
+                  avatar === a.key && styles.avatarSelected,
+                  pressed && { transform: [{ scale: 0.93 }] },
+                  focused && styles.focused,
+                ]}
               >
-                <AvatarIcon avatarKey={a.key} size={24} />
+                <AvatarIcon avatarKey={a.key} size={26} />
               </Pressable>
             ))}
           </View>
@@ -95,23 +106,33 @@ export default function SettingsPopup({ user, onClose, onUserChange }) {
 
         {tab === 'name' ? (
           <View style={styles.form}>
-            <Field label="Nome de usuário ✎" value={username} onChangeText={setUsername} onSubmitEditing={save} />
+            <Field label="Nome de usuário" value={username} onChangeText={setUsername} onSubmitEditing={save} />
             <Txt style={styles.hint}>É o nome que você usa para entrar. Precisa de internet.</Txt>
           </View>
         ) : null}
 
         {tab === 'password' ? (
           <View style={styles.form}>
-            <Field placeholder="Senha atual" value={current} onChangeText={setCurrent} secureTextEntry />
-            <Field placeholder="Nova senha" value={next} onChangeText={setNext} secureTextEntry />
-            <Field placeholder="Confirmar senha" value={confirm} onChangeText={setConfirm} secureTextEntry onSubmitEditing={save} />
+            <Field label="Senha atual" placeholder="Digite a senha atual" value={current} onChangeText={setCurrent} secureTextEntry />
+            <Field label="Nova senha" placeholder="Pelo menos 4 caracteres" value={next} onChangeText={setNext} secureTextEntry />
+            <Field label="Confirmar nova senha" placeholder="Digite a nova senha de novo" value={confirm} onChangeText={setConfirm} secureTextEntry onSubmitEditing={save} />
           </View>
         ) : null}
       </View>
 
       <Message text={msg.text} kind={msg.kind} />
-      <Btn title="SALVAR" onPress={save} loading={busy} style={{ minWidth: 140 }} />
-      <Btn title="Voltar ao jogo" variant="light" small onPress={onClose} style={{ marginTop: 8 }} />
+      <View style={styles.actions}>
+        <Btn title="Voltar" variant="light" onPress={onClose} style={styles.actionButton} />
+        <Btn title="SALVAR" onPress={save} loading={busy} style={[styles.actionButton, { minWidth: 140 }]} />
+      </View>
+      {onLogout ? (
+        <Pressable onPress={onLogout} accessibilityRole="button" hitSlop={8} style={styles.logout}>
+          <LogoutIcon size={16} color={colors.muted} />
+          <Txt weight="semibold" style={styles.logoutText}>
+            Sair da conta
+          </Txt>
+        </Pressable>
+      ) : null}
     </Popup>
   );
 }
@@ -119,28 +140,37 @@ export default function SettingsPopup({ user, onClose, onUserChange }) {
 const styles = StyleSheet.create({
   tabs: {
     flexDirection: 'row',
-    borderWidth: 1.5,
-    borderColor: colors.ink,
-    backgroundColor: colors.white,
     alignSelf: 'stretch',
-    marginBottom: 12,
+    backgroundColor: colors.white,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.line,
+    padding: 3,
+    marginBottom: space.lg,
   },
-  tab: { flex: 1, paddingVertical: 7, alignItems: 'center' },
-  tabDivider: { borderLeftWidth: 1, borderLeftColor: colors.line },
-  body: { alignSelf: 'stretch', alignItems: 'center', minHeight: 120, justifyContent: 'center' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 330 },
+  tab: { flex: 1, minHeight: 40, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  tabActive: { backgroundColor: colors.orangeDark },
+  focused: { outlineWidth: 3, outlineColor: colors.focus, outlineStyle: 'solid', outlineOffset: 2 },
+  body: { alignSelf: 'stretch', alignItems: 'center', minHeight: 140, justifyContent: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 340 },
   avatar: {
-    width: 54,
-    height: 42,
+    width: 56,
+    height: 56,
     margin: 5,
-    borderRadius: 12,
+    borderRadius: radius.md,
     backgroundColor: '#FFF1C9',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
+    borderBottomWidth: 4,
+    borderBottomColor: '#E8D59E',
   },
-  avatarSelected: { backgroundColor: colors.gold, borderColor: colors.orangeDark },
-  form: { width: '100%', maxWidth: 280 },
-  hint: { fontSize: 11, color: colors.muted, textAlign: 'center' },
+  avatarSelected: { backgroundColor: colors.gold, borderColor: colors.orangeDark, borderBottomColor: colors.orangeDark },
+  form: { width: '100%', maxWidth: 300 },
+  hint: { fontSize: 12, color: colors.muted, textAlign: 'center' },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: space.sm },
+  actionButton: { marginHorizontal: space.xs, marginVertical: space.xs },
+  logout: { flexDirection: 'row', alignItems: 'center', minHeight: 44, marginTop: space.xs, paddingHorizontal: space.md },
+  logoutText: { color: colors.muted, fontSize: 14, marginLeft: 6, textDecorationLine: 'underline' },
 });

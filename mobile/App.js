@@ -7,18 +7,27 @@ import { initDb } from './src/db';
 import AuthScreen from './src/screens/AuthScreen';
 import GameScreen from './src/screens/GameScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import { lastWeek, levelInfo } from './src/game';
 import * as session from './src/session';
 import { colors } from './src/theme';
 
 const SYNC_INTERVAL_MS = 60 * 1000;
-const EMPTY_STATS = { coins: 0, level: 0, into: 0, needed: 20, remaining: 20, pending: 0, hasContent: false };
+const EMPTY_STATS = {
+  coins: 0,
+  ...levelInfo(0),
+  pending: 0,
+  hasContent: false,
+  phases: [],
+  streak: { current: 0, best: 0, activeToday: false },
+  week: lastWeek([]),
+};
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ Fredoka_400Regular, Fredoka_600SemiBold, Fredoka_700Bold });
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState(null);
   const [screen, setScreen] = useState('home'); // 'home' | 'game'
-  const [difficulty, setDifficulty] = useState(null);
+  const [phaseId, setPhaseId] = useState(null); // fase escolhida na trilha
   const [stats, setStats] = useState(EMPTY_STATS);
   const [sync, setSync] = useState(null);
   const userRef = useRef(null);
@@ -92,7 +101,6 @@ export default function App() {
 
   function handleExitGame() {
     setScreen('home');
-    setDifficulty(null);
     refresh();
     runSync();
   }
@@ -111,14 +119,14 @@ export default function App() {
       {!user ? (
         <AuthScreen onAuthenticated={handleAuthenticated} />
       ) : screen === 'game' ? (
-        <GameScreen user={user} difficulty={difficulty} onExit={handleExitGame} />
+        <GameScreen user={user} phaseId={phaseId} onExit={handleExitGame} />
       ) : (
         <HomeScreen
           user={user}
           stats={stats}
           sync={sync}
-          onStart={d => {
-            setDifficulty(d);
+          onStart={id => {
+            setPhaseId(id ?? null);
             setScreen('game');
           }}
           onLogout={handleLogout}

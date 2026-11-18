@@ -237,7 +237,7 @@ docker compose up --build
 
 Conta de demonstração: usuário **joao**, senha **1234** (ou crie uma conta em "Cadastrar-se").
 
-> **Atualizando de uma versão anterior?** O esquema do banco mudou (login por usuário/senha, fases e dificuldades). Recrie o banco de desenvolvimento com `docker compose down -v && docker compose up --build`.
+> **Atualizando de uma versão anterior?** O esquema do banco mudou (login por usuário/senha e banco de perguntas por tema). Recrie o banco de desenvolvimento com `docker compose down -v && docker compose up --build`.
 
 ## 🎮 Fluxo e regras do jogo
 
@@ -246,24 +246,33 @@ Interface baseada no protótipo do Figma (`interface/interface_figma.png`):
 ```text
 Login / Cadastro → Home (Iniciar · Configurações · Sair)
                      ↓
-          Seleção de dificuldade (Fácil · Médio · Difícil)
+   Rodada com 6 perguntas montada pelo nível do aluno
+        (múltipla escolha + fala, da mais fácil à mais difícil)
                      ↓
-     Fase com 6 perguntas (múltipla escolha + fala)
-                     ↓
-   Pop-up de acerto/erro com recompensa → "Fase finalizada!"
+   Pop-up de acerto/erro com recompensa → "Rodada finalizada!" / "Nível N!"
 ```
+
+O aluno **não escolhe a dificuldade**: a trilha é uma sequência fixa de **fases** (tema × dificuldade) e a dificuldade sobe conforme ele avança. Os temas vêm em **unidades de 4**: primeiro as fases fáceis da unidade, depois as médias, depois as difíceis; então começa a próxima unidade, com vocabulário novo. São 16 temas, 4 unidades e 48 fases.
 
 | Regra | Valor |
 |-------|-------|
-| Moedas por acerto | Fácil 1 · Médio 2 · Difícil 3 (só no **primeiro** acerto de cada pergunta) |
-| Nível | a cada 20 moedas |
-| Passar de fase | acertar pelo menos 4 de 6; as fases desbloqueiam em ordem |
-| Pergunta de voz | similaridade ≥ 75% com a frase esperada (tolera sotaque) |
+| Liberação de fases | uma fase só abre quando a anterior é **concluída** (todas as perguntas dela respondidas) |
+| Sem repetição | cada pergunta aparece **uma única vez** para o aluno: respondidas (certas ou erradas, em qualquer aparelho, via `answered_activity_ids`) e puladas não voltam |
+| Ordem das perguntas | sequência lógica do conteúdo, sem sorteio: palavra → falar a palavra; depois "como se diz" → ouvir; depois frases → ouvir → falar; por fim, completar frases |
+| Rodada | até 6 perguntas seguidas da fase atual |
+| Moedas por acerto | Fácil 1 · Médio 2 · Difícil 3 |
+| Nível | curva crescente: do nível L para o L+1 são `10 + 5×L` moedas (10, 15, 20, 25…); cada faixa de nível tem um título (Caranguejinho, Explorador do mangue, Aventureiro, Navegador, Capitão, Mestre do francês) |
+| Pergunta de voz | similaridade ≥ 75% com a frase esperada, comparando a escrita **e** a pronúncia aproximada; números ditos como dígitos ("5") viram palavras ("cinq"); falar a frase com algo a mais ("euh… cinq") também vale |
+| Ouça e escolha | o aparelho fala a frase em francês (normal ou devagar) e o aluno escolhe a tradução |
+| Aparelho sem recursos de voz | perguntas de voz (sem reconhecimento) e de escuta (sem síntese de voz) ficam fora das fases |
+| Ofensiva (foguinho) | dias seguidos com pelo menos uma resposta; o dia segue o horário de Recife (UTC-3) no app e no servidor |
 
-- As regras ficam em `backend/app/game_rules.py` (servidor, fonte da verdade) e `mobile/src/game.js` (cliente, para funcionar offline). `npm run check:rules` (em `mobile/`) confere se os dois dão o mesmo resultado nos casos de `backend/tests/answer_cases.json`.
-- O conteúdo das fases fica em `backend/app/seed_content.py`. Para publicar conteúdo novo, adicione itens e aumente `CONTENT_VERSION`: os aparelhos baixam na próxima sincronização.
-- **O que funciona offline:** login (depois do primeiro acesso online no aparelho), jogar, ganhar moedas/nível e trocar o avatar. **Precisa de internet:** cadastro, troca de nome/senha e o reconhecimento de voz (no navegador). Sem reconhecimento de voz, o aluno pode ouvir a frase (🔊) e pular a pergunta sem perder pontos.
-- A sincronização é automática: ao entrar, ao terminar uma fase, quando a internet volta e a cada minuto.
+Na tela inicial o aluno vê a **trilha de fases** separada por unidades (cada nó mostra o progresso da fase e as estrelas da dificuldade), a barra do topo com **foguinho da ofensiva**, moedas e nível, e a barra de nível embaixo. Cada pergunta segue o fluxo *escolher → VERIFICAR → faixa verde/vermelha → CONTINUAR*. No fim da rodada aparecem a comemoração da ofensiva (na primeira rodada do dia) e o resumo com moedas, precisão e ofensiva. A ofensiva funciona offline (conta as respostas salvas no aparelho) e soma o histórico do servidor (`active_days` em `/api/v1/me`); o painel do educador também mostra `streak` e `best_streak`.
+
+- As regras ficam em `backend/app/game_rules.py` (servidor, fonte da verdade) e `mobile/src/game.js` (cliente, para funcionar offline). `npm run check:rules` (em `mobile/`) confere se os dois dão o mesmo resultado nos casos de `backend/tests/answer_cases.json`, `level_cases.json` e `streak_cases.json`.
+- O banco de perguntas fica em `backend/app/seed_content.py`: 16 temas (saudações, números e cores, família, animais, comida, corpo, roupas, escola, casa, lugares da cidade, natureza, dias e horas, ações, esportes, sentimentos e profissões), com 1.240 perguntas no total. A maior parte é gerada a partir de listas de vocabulário e frases de cada tema; para publicar conteúdo novo, adicione itens e aumente `CONTENT_VERSION`: os aparelhos baixam na próxima sincronização.
+- **O que funciona offline:** login (depois do primeiro acesso online no aparelho), jogar, ganhar moedas/nível e trocar o avatar. **Precisa de internet:** cadastro, troca de nome/senha e o reconhecimento de voz (no navegador). Sem reconhecimento de voz, o aluno pode ouvir a frase e pular a pergunta sem perder pontos.
+- A sincronização é automática: ao entrar, ao terminar uma rodada, quando a internet volta e a cada minuto.
 
 ## Como o offline funciona na web
 
@@ -287,7 +296,7 @@ Internet de volta: a sincronização automática envia as tentativas à API
 
 1. Abra http://localhost:8080, escolha o perfil e faça login.
 2. No DevTools do navegador (F12) → **Application → Service Workers**, marque **Offline** (ou pare os containers com `docker compose stop`).
-3. Recarregue a página: o jogo continua abrindo. Jogue uma fase e veja o aviso "respostas aguardando internet".
+3. Recarregue a página: o jogo continua abrindo. Jogue uma rodada e veja o aviso "respostas aguardando internet".
 4. Volte a ficar online: as respostas sobem sozinhas e o selo mostra "Progresso salvo no servidor".
 
 ## Limitações conhecidas

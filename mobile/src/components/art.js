@@ -3,10 +3,10 @@
 // Windows não mostra bandeiras.
 
 import React from 'react';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Ellipse, G, Path, Polygon, Rect } from 'react-native-svg';
 
-import { AVATARS, colors } from '../theme';
+import { AVATARS, colors, fonts } from '../theme';
 
 const W = 120;
 const H = 90;
@@ -95,3 +95,27 @@ export function AvatarIcon({ avatarKey, size = 24 }) {
     </View>
   );
 }
+
+/** Logotipo: caranguejo + nome do jogo. `light` para fundos escuros. */
+export function Logo({ size = 84, light = false, style }) {
+  return (
+    <View style={[logoStyles.wrap, style]} accessibilityRole="header" accessibilityLabel="Crabjeu">
+      <Crab size={size} color="#E0431B" />
+      <Text
+        style={[
+          logoStyles.text,
+          { fontSize: size * 0.3, color: light ? colors.white : colors.orangeDark },
+          light && logoStyles.textShadow,
+        ]}
+      >
+        CRABJEU
+      </Text>
+    </View>
+  );
+}
+
+const logoStyles = StyleSheet.create({
+  wrap: { alignItems: 'center' },
+  text: { fontFamily: fonts.bold, letterSpacing: 3, marginTop: 2 },
+  textShadow: { textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
+});
