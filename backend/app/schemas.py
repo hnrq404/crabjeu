@@ -24,6 +24,12 @@ class UserOut(BaseModel):
     coins: int = 0
     level: int = 0
     earned_activity_ids: list[str] = []
+    # Toda pergunta já respondida (certa ou errada): o jogo não repete nenhuma.
+    answered_activity_ids: list[str] = []
+    # Ofensiva: dias (AAAA-MM-DD, horário de Recife) em que o aluno respondeu perguntas.
+    active_days: list[str] = []
+    streak: int = 0
+    best_streak: int = 0
 
 
 class LoginOut(BaseModel):

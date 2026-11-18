@@ -188,6 +188,18 @@ export async function getPendingAttempts(studentId) {
   );
 }
 
+/** Perguntas que este aparelho já registrou como respondidas (certas ou erradas). */
+export async function getAttemptedIds(studentId) {
+  const rows = await conn().getAllAsync('SELECT DISTINCT activity_id FROM attempts WHERE student_id = ?', studentId);
+  return rows.map(r => r.activity_id);
+}
+
+/** Momento (ISO) de cada tentativa deste aparelho, para calcular a ofensiva. */
+export async function getAttemptMoments(studentId) {
+  const rows = await conn().getAllAsync('SELECT completed_at FROM attempts WHERE student_id = ?', studentId);
+  return rows.map(r => r.completed_at);
+}
+
 export async function countPendingAttempts(studentId) {
   const row = await conn().getFirstAsync(
     'SELECT COUNT(*) AS n FROM attempts WHERE student_id = ? AND synced = 0',

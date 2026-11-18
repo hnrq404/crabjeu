@@ -108,9 +108,23 @@ def earned_activities(db: Session, student_id: str) -> list[tuple[str, str]]:
     return [(r[0], r[1]) for r in rows]
 
 
+def answered_activities(db: Session, student_id: str) -> list[str]:
+    rows = db.scalars(
+        select(ActivityAttempt.activity_id).where(ActivityAttempt.student_id == student_id).distinct()
+    ).all()
+    return sorted(rows)
+
+
+def active_days(db: Session, student_id: str) -> set[str]:
+    moments = db.scalars(select(ActivityAttempt.completed_at).where(ActivityAttempt.student_id == student_id)).all()
+    return {game_rules.day_key(m) for m in moments if m}
+
+
 def user_out(db: Session, user: User) -> UserOut:
     earned = earned_activities(db, user.id)
     coins = game_rules.coins_for([d for _, d in earned])
+    days = active_days(db, user.id)
+    streak = game_rules.streak_info(days, game_rules.day_key(datetime.now(timezone.utc)))
     return UserOut(
         id=user.id,
         username=user.username,
@@ -119,6 +133,10 @@ def user_out(db: Session, user: User) -> UserOut:
         coins=coins,
         level=game_rules.level_for(coins),
         earned_activity_ids=sorted(a for a, _ in earned),
+        answered_activity_ids=answered_activities(db, user.id),
+        active_days=sorted(days)[-400:],
+        streak=streak["current"],
+        best_streak=streak["best"],
     )
 
 
@@ -303,6 +321,8 @@ def educator_students(db: Session = Depends(get_db), _: dict = Depends(require_e
             "correct_activities_count": len(summary.earned_activity_ids),
             "coins": summary.coins,
             "level": summary.level,
+            "streak": summary.streak,
+            "best_streak": summary.best_streak,
             "last_sync": last_sync,
         })
     return result

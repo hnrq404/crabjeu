@@ -5,9 +5,15 @@
 
 import * as Speech from 'expo-speech';
 
-export function speak(text) {
+/** Fala a frase em francês. `slow` = mais devagar (botão da tartaruga). */
+export function speak(text, { slow = false } = {}) {
   Speech.stop();
-  Speech.speak(text, { language: 'fr-FR', rate: 0.85 });
+  Speech.speak(text, { language: 'fr-FR', rate: slow ? 0.55 : 0.85 });
+}
+
+/** expo-speech fala usando a voz do aparelho (funciona offline). */
+export function canSpeak() {
+  return true;
 }
 
 export function recognitionAvailable() {

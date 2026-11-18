@@ -1,0 +1,9 @@
+[
+  { "name": "sem dias", "days": [], "today": "2026-11-18", "current": 0, "best": 0, "active_today": false },
+  { "name": "só hoje", "days": ["2026-11-18"], "today": "2026-11-18", "current": 1, "best": 1, "active_today": true },
+  { "name": "três seguidos até hoje", "days": ["2026-11-16", "2026-11-17", "2026-11-18"], "today": "2026-11-18", "current": 3, "best": 3, "active_today": true },
+  { "name": "ainda não jogou hoje, mas jogou ontem", "days": ["2026-11-16", "2026-11-17"], "today": "2026-11-18", "current": 2, "best": 2, "active_today": false },
+  { "name": "perdeu a ofensiva", "days": ["2026-11-10", "2026-11-11", "2026-11-12", "2026-11-16"], "today": "2026-11-18", "current": 0, "best": 3, "active_today": false },
+  { "name": "virada de mês", "days": ["2026-10-30", "2026-10-31", "2026-11-01"], "today": "2026-11-01", "current": 3, "best": 3, "active_today": true },
+  { "name": "virada de ano", "days": ["2026-12-31", "2027-01-01"], "today": "2027-01-02", "current": 2, "best": 2, "active_today": false }
+]

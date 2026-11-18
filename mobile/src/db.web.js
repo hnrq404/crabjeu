@@ -175,6 +175,21 @@ export async function getPendingAttempts(studentId) {
     .sort((a, b) => a.completed_at.localeCompare(b.completed_at));
 }
 
+/** Perguntas que este aparelho já registrou como respondidas (certas ou erradas). */
+export async function getAttemptedIds(studentId) {
+  const ids = Object.values(conn().attempts)
+    .filter(a => a.student_id === studentId)
+    .map(a => a.activity_id);
+  return [...new Set(ids)];
+}
+
+/** Momento (ISO) de cada tentativa deste aparelho, para calcular a ofensiva. */
+export async function getAttemptMoments(studentId) {
+  return Object.values(conn().attempts)
+    .filter(a => a.student_id === studentId)
+    .map(a => a.completed_at);
+}
+
 export async function countPendingAttempts(studentId) {
   return (await getPendingAttempts(studentId)).length;
 }
