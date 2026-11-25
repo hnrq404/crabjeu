@@ -14,6 +14,21 @@ O funcionamento offline da versão web depende do *service worker* (`sw.js`), qu
 só ativam em `https://` (ou `localhost`). Sem HTTPS o jogo abre, mas **não funciona sem internet**.
 O Caddy emite e renova o certificado Let's Encrypt sozinho.
 
+## ⚡ Caminho rápido (VPS grátis + um comando)
+
+1. Crie uma VPS grátis com **Ubuntu** (ex.: Oracle Cloud *Always Free*) e libere as portas **80** e **443** no painel.
+2. Entre por SSH e rode:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hnrq404/crabjeu/main/deploy/setup-vps.sh | sudo bash
+```
+
+O script `deploy/setup-vps.sh` instala o Docker, cria swap, abre o firewall, gera as senhas,
+usa um endereço grátis `IP.sslip.io` com HTTPS (ou o seu, com `sudo DOMAIN=meu.dominio bash`)
+e sobe tudo. No final mostra o link do jogo e o login do educador. Rodar de novo = atualizar.
+
+O resto deste guia explica o passo a passo manual.
+
 ## 1. Pré-requisitos
 
 - Uma VPS Linux (1 vCPU / 1 GB RAM basta; ex.: Oracle Cloud Free, Hetzner, DigitalOcean).
