@@ -1,4 +1,34 @@
-# 🚀 Deploy do Crabjeu (VPS + Docker + HTTPS)
+# 🚀 Deploy do Crabjeu
+
+Duas opções, ambas grátis e com HTTPS (obrigatório para o PWA funcionar offline):
+
+- **A) Render + Neon** — sem servidor para administrar, sem cartão. ⬇️ logo abaixo.
+- **B) VPS com Docker** — mais controle e sem "hibernação". Veja a partir de "Caminho rápido".
+
+## A) Render (app) + Neon (banco)
+
+Um único serviço (`Dockerfile` da raiz) entrega a API **e** o PWA no mesmo endereço.
+
+1. **Banco (Neon):** crie conta em neon.tech (entrar com GitHub) → *New project* (região São Paulo, se houver) →
+   copie a *connection string* (`postgresql://...neon.tech/neondb?sslmode=require`).
+2. **App (Render):** crie conta em render.com (entrar com GitHub) → **New → Blueprint** → escolha o repositório
+   `crabjeu` (e a branch com o `render.yaml`). Ele lê o `render.yaml` e pede:
+   - `DATABASE_URL`: a connection string do Neon;
+   - `EDUCATOR_PASSWORD`: a senha do educador.
+
+   O `JWT_SECRET` é gerado sozinho. Clique em **Apply** e espere o build (~5 min).
+3. Abra `https://crabjeu-xxxx.onrender.com` (aparece no painel) e teste `…/health`.
+
+Para atualizar: basta dar push na branch; o Render refaz o deploy sozinho.
+
+**Como fica o offline nesse plano grátis:** o serviço "dorme" após 15 min sem uso e leva ~1 min para acordar.
+Isso não atrapalha o aluno: o app abre do cache, as respostas ficam no aparelho e a sincronização
+automática (a cada minuto) tenta de novo até o servidor responder. Abrir a página com internet já acorda o servidor.
+Não mude o `JWT_SECRET` gerado depois que os alunos começarem a usar.
+
+---
+
+# B) VPS com Docker
 
 Arquitetura em produção:
 

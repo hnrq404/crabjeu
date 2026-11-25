@@ -1,0 +1,23 @@
+# Blueprint do Render: um serviço web grátis (API + PWA) com HTTPS automático.
+# O banco fica no Neon (PostgreSQL grátis que não expira): cole a URL em DATABASE_URL.
+services:
+  - type: web
+    name: crabjeu
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: EDUCATOR_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEED_DEMO_USERS
+        value: "false"
+      - key: EDUCATOR_USERNAME
+        value: educador
+      - key: JWT_EXPIRE_HOURS
+        value: "720"

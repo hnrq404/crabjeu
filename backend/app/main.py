@@ -338,3 +338,33 @@ def educator_students(db: Session = Depends(get_db), _: dict = Depends(require_e
             "last_sync": last_sync,
         })
     return result
+
+
+# --------------------------------------------------------------------------- PWA
+# Em hospedagens de serviço único (ex.: Render), a própria API entrega o PWA.
+# STATIC_DIR aponta para o build web (expo export + sw.js). Sem ele, nada muda.
+
+STATIC_DIR = os.getenv("STATIC_DIR")
+
+if STATIC_DIR and os.path.isdir(STATIC_DIR):
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+
+    _static_root = Path(STATIC_DIR).resolve()
+    _NO_CACHE = {"Cache-Control": "no-cache"}
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def pwa(path: str):
+        if path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        file = (_static_root / path).resolve()
+        if path and file.is_file() and file.is_relative_to(_static_root):
+            if path.startswith("_expo/"):
+                headers = {"Cache-Control": "public, max-age=31536000, immutable"}
+            else:
+                headers = _NO_CACHE
+            media = "application/manifest+json" if file.suffix == ".webmanifest" else None
+            return FileResponse(file, headers=headers, media_type=media)
+        # Rotas do app (SPA) caem no index.html.
+        return FileResponse(_static_root / "index.html", headers=_NO_CACHE)
