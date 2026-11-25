@@ -1,0 +1,66 @@
+# Deploy de produção em uma VPS (Docker + HTTPS automático via Caddy/Let's Encrypt).
+#
+#   cp .env.production.example .env.production   # e preencha os valores
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Só o Caddy fica exposto (portas 80/443). API e banco ficam na rede interna.
+# O app nativo e o PWA usam o mesmo endereço: https://SEU_DOMINIO (o nginx repassa /api ao FastAPI).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: crabjeu
+      POSTGRES_USER: crabjeu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env.production}
+    volumes:
+      - crabjeu_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crabjeu -d crabjeu"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://crabjeu:${POSTGRES_PASSWORD}@db:5432/crabjeu
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env.production}
+      # Validade do login (o aluno entra offline enquanto o token não expira).
+      JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS:-720}
+      # Em produção não criamos as contas de demonstração (joao/1234, educador/4321).
+      SEED_DEMO_USERS: "false"
+      EDUCATOR_USERNAME: ${EDUCATOR_USERNAME:-educador}
+      EDUCATOR_PASSWORD: ${EDUCATOR_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./mobile
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?defina DOMAIN no .env.production}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  crabjeu_pgdata:
+  caddy_data:
+  caddy_config:

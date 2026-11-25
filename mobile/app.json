@@ -9,6 +9,10 @@
       "expo-sqlite",
       "expo-status-bar",
       "expo-font"
-    ]
+    ],
+    "android": {
+      "package": "br.org.crabjeu",
+      "versionCode": 1
+    }
   }
 }
