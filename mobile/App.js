@@ -5,6 +5,7 @@ import { ActivityIndicator, AppState, Platform, StyleSheet, View } from 'react-n
 
 import { initDb } from './src/db';
 import AuthScreen from './src/screens/AuthScreen';
+import EducatorScreen from './src/screens/EducatorScreen';
 import GameScreen from './src/screens/GameScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import { lastWeek, levelInfo } from './src/game';
@@ -29,6 +30,10 @@ export default function App() {
   const [screen, setScreen] = useState('home'); // 'home' | 'game'
   const [phaseId, setPhaseId] = useState(null); // fase escolhida na trilha
   const [stats, setStats] = useState(EMPTY_STATS);
+  // Área do educador: pelo botão na tela de login ou direto pelo link /educador (web).
+  const [educator, setEducator] = useState(
+    () => Platform.OS === 'web' && typeof window !== 'undefined' && window.location.pathname.startsWith('/educador')
+  );
   const [sync, setSync] = useState(null);
   const userRef = useRef(null);
   userRef.current = user;
@@ -99,6 +104,22 @@ export default function App() {
     setSync(null);
   }
 
+  function setPath(path) {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location.pathname !== path) {
+      window.history.pushState(null, '', path);
+    }
+  }
+
+  function openEducator() {
+    setPath('/educador');
+    setEducator(true);
+  }
+
+  function closeEducator() {
+    setPath('/');
+    setEducator(false);
+  }
+
   function handleExitGame() {
     setScreen('home');
     refresh();
@@ -116,8 +137,10 @@ export default function App() {
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
-      {!user ? (
-        <AuthScreen onAuthenticated={handleAuthenticated} />
+      {educator ? (
+        <EducatorScreen onBack={closeEducator} />
+      ) : !user ? (
+        <AuthScreen onAuthenticated={handleAuthenticated} onEducator={openEducator} />
       ) : screen === 'game' ? (
         <GameScreen user={user} phaseId={phaseId} onExit={handleExitGame} />
       ) : (

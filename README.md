@@ -274,6 +274,10 @@ Na tela inicial o aluno vê a **trilha de fases** separada por unidades (cada n�
 - **O que funciona offline:** login (depois do primeiro acesso online no aparelho), jogar, ganhar moedas/nível e trocar o avatar. **Precisa de internet:** cadastro, troca de nome/senha e o reconhecimento de voz (no navegador). Sem reconhecimento de voz, o aluno pode ouvir a frase e pular a pergunta sem perder pontos.
 - A sincronização é automática: ao entrar, ao terminar uma rodada, quando a internet volta e a cada minuto.
 
+## 👩‍🏫 Área do educador
+
+Na tela de login, o link **"Sou educador · Ver progresso dos alunos"** abre o painel (na web também pelo endereço `/educador`). Ele mostra, para cada aluno, nível, moedas, acertos, atividades concluídas, ofensiva e há quanto tempo sincronizou, com busca, ordenação e destaque em vermelho para quem está há 7 dias ou mais sem sincronizar. Precisa de internet, porque os dados vêm do servidor. A conta de educador é criada pela variável `EDUCATOR_PASSWORD` no deploy (em desenvolvimento: `educador` / `4321`).
+
 ## Como o offline funciona na web
 
 ```text
