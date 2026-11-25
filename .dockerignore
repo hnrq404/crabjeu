@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/.expo
+**/dist
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/.env
+.env.production
+backend/tests

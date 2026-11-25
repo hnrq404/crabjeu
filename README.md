@@ -307,7 +307,7 @@ Internet de volta: a sincronização automática envia as tentativas à API
 
 ## Deploy em produção
 
-O deploy em VPS com HTTPS automático (Caddy), backup do banco e geração do APK Android estão descritos em [`docs/DEPLOY.md`](docs/DEPLOY.md).
+O deploy grátis (Render + Neon, ou VPS com Docker e HTTPS automático), backup do banco e geração do APK Android estão descritos em [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Build web sem Docker
 
