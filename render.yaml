@@ -4,6 +4,7 @@ services:
   - type: web
     name: crabjeu
     runtime: docker
+    region: virginia
     dockerfilePath: ./Dockerfile
     plan: free
     healthCheckPath: /health
