@@ -276,7 +276,7 @@ Na tela inicial o aluno vê a **trilha de fases** separada por unidades (cada n�
 
 ## 👩‍🏫 Área do educador
 
-Na tela de login, o link **"Sou educador · Ver progresso dos alunos"** abre o painel (na web também pelo endereço `/educador`). Ele mostra, para cada aluno, nível, moedas, acertos, atividades concluídas, ofensiva e há quanto tempo sincronizou, com busca, ordenação e destaque em vermelho para quem está há 7 dias ou mais sem sincronizar. Precisa de internet, porque os dados vêm do servidor. A conta de educador é criada pela variável `EDUCATOR_PASSWORD` no deploy (em desenvolvimento: `educador` / `4321`).
+Na tela de login, o link **"Sou educador · Ver progresso dos alunos"** abre o painel (na web também pelo endereço `/educador`). Ele mostra, para cada aluno, nível, moedas, acertos, atividades concluídas, ofensiva e há quanto tempo sincronizou, com busca, ordenação e destaque em vermelho para quem está há 7 dias ou mais sem sincronizar. Há também **gráficos da turma** (respostas por dia nos últimos 30 dias, temas e tipos de pergunta com mais erros) e, ao tocar num aluno, os **gráficos dele** (acertos e erros por dia; taxa de erro por tema, dificuldade e tipo de pergunta) e a lista dos **últimos erros**, com o que ele respondeu e a resposta certa (`/api/v1/educator/overview` e `/api/v1/educator/students/{id}`). Precisa de internet, porque os dados vêm do servidor. A conta de educador é criada pela variável `EDUCATOR_PASSWORD` no deploy (em desenvolvimento: `educador` / `4321`).
 
 ## Como o offline funciona na web
 

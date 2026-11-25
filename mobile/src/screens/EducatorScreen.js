@@ -6,7 +6,8 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View
 import { api, WAKE_TIMEOUT_MS } from '../api';
 import { Logo } from '../components/art';
 import { MenuBackground } from '../components/backgrounds';
-import { CoinIcon, FlameIcon } from '../components/icons';
+import { DailyChart, ErrorMeters, Section, chartColors, percent } from '../components/charts';
+import { ChevronIcon, CoinIcon, FlameIcon } from '../components/icons';
 import { BackButton, Btn, Field, Message, Txt } from '../components/ui';
 import { colors, radius, space } from '../theme';
 
@@ -56,6 +57,8 @@ export default function EducatorScreen({ onBack }) {
   const [slow, setSlow] = useState(false);
   const [error, setError] = useState('');
   const [students, setStudents] = useState(null);
+  const [overview, setOverview] = useState(null);
+  const [openStudent, setOpenStudent] = useState(null); // aluno com os detalhes abertos
   const [loadedAt, setLoadedAt] = useState(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('name');
@@ -73,8 +76,12 @@ export default function EducatorScreen({ onBack }) {
     setBusy(true);
     setError('');
     try {
-      const data = await api.educatorStudents(currentToken);
+      const [data, stats] = await Promise.all([
+        api.educatorStudents(currentToken),
+        api.educatorOverview(currentToken),
+      ]);
       setStudents(data.map(s => ({ ...s, syncDate: parseDate(s.last_sync) })));
+      setOverview(stats);
       setLoadedAt(Date.now());
     } catch (e) {
       if (e?.status === 401 || e?.status === 403) {
@@ -116,6 +123,8 @@ export default function EducatorScreen({ onBack }) {
   function logout() {
     setToken(null);
     setStudents(null);
+    setOverview(null);
+    setOpenStudent(null);
     setQuery('');
   }
 
@@ -172,6 +181,10 @@ export default function EducatorScreen({ onBack }) {
     );
   }
 
+  if (openStudent) {
+    return <StudentDetail token={token} student={openStudent} now={now} onBack={() => setOpenStudent(null)} />;
+  }
+
   return (
     <MenuBackground>
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
@@ -196,6 +209,24 @@ export default function EducatorScreen({ onBack }) {
           <Message text={error} />
           <Message kind="info" text={slow ? 'Acordando o servidor… pode levar até 1 minuto.' : ''} />
 
+          {overview ? (
+            <>
+              <Section title="Respostas da turma" hint="Últimos 30 dias. Toque numa coluna para ver o dia.">
+                <DailyChart daily={overview.daily} />
+              </Section>
+              <Section
+                title="Onde a turma mais erra"
+                hint={`Taxa de erro por tema · ${percent(overview.correct, overview.answered)}% de acerto no geral`}
+              >
+                <ErrorMeters rows={overview.by_module} ranked limit={5} />
+              </Section>
+              <Section title="Erros por tipo de pergunta">
+                <ErrorMeters rows={overview.by_kind} />
+              </Section>
+            </>
+          ) : null}
+
+          <Txt weight="bold" style={styles.listTitle}>Alunos</Txt>
           <Field placeholder="Buscar aluno pelo nome" value={query} onChangeText={setQuery} accessibilityLabel="Buscar aluno" />
 
           <View style={styles.sortRow} accessibilityRole="radiogroup" accessibilityLabel="Ordenar por">
@@ -220,7 +251,7 @@ export default function EducatorScreen({ onBack }) {
           ) : null}
 
           {visible.map(s => (
-            <StudentCard key={s.student_id} student={s} now={now} />
+            <StudentCard key={s.student_id} student={s} now={now} onPress={() => setOpenStudent(s)} />
           ))}
         </View>
       </ScrollView>
@@ -237,11 +268,16 @@ function SummaryTile({ value, label, color = colors.ink }) {
   );
 }
 
-function StudentCard({ student: s, now }) {
+function StudentCard({ student: s, now, onPress }) {
   const days = daysSince(s.syncDate, now);
   const stale = days === null || days >= INACTIVE_DAYS;
   return (
-    <View style={[styles.student, stale && styles.studentStale]}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityHint="Abre os gráficos e os erros deste aluno"
+      style={({ pressed, hovered }) => [styles.student, stale && styles.studentStale, (pressed || hovered) && styles.studentHover]}
+    >
       <View style={styles.studentTop}>
         <Txt weight="bold" style={styles.studentName} numberOfLines={1}>{s.name}</Txt>
         <View style={styles.levelPill}>
@@ -254,8 +290,126 @@ function StudentCard({ student: s, now }) {
         <Stat text={`${s.completed_activities_count} concluídas`} />
         <Stat icon={<FlameIcon size={14} off={!s.streak} />} text={`${s.streak} ${s.streak === 1 ? 'dia' : 'dias'} (recorde ${s.best_streak})`} />
       </View>
-      <Txt weight="semibold" style={[styles.sync, { color: stale ? colors.wrongDark : colors.muted }]}>
-        {syncLabel(s.syncDate, now)}
+      <View style={styles.cardFoot}>
+        <Txt weight="semibold" style={[styles.sync, { color: stale ? colors.wrongDark : colors.muted }]}>
+          {syncLabel(s.syncDate, now)}
+        </Txt>
+        <View style={styles.details}>
+          <Txt weight="semibold" style={styles.detailsText}>Gráficos e erros</Txt>
+          <ChevronIcon size={16} color={colors.orangeDark} />
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function formatDateTime(value) {
+  const date = parseDate(value);
+  return date
+    ? date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '';
+}
+
+function StudentDetail({ token, student, now, onBack }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(true);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setError('');
+    try {
+      setData(await api.educatorStudent(token, student.student_id));
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [token, student.student_id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <MenuBackground>
+      <ScrollView contentContainerStyle={styles.page}>
+        <View style={styles.panel}>
+          <View style={styles.header}>
+            <BackButton onPress={onBack} color={colors.orange} label="Voltar para a lista de alunos" style={styles.inlineBack} />
+            <View style={{ flex: 1 }}>
+              <Txt weight="bold" style={styles.pageTitle} numberOfLines={1}>{student.name}</Txt>
+              <Txt style={styles.pageSub}>Nível {student.level} · {syncLabel(student.syncDate, now)}</Txt>
+            </View>
+            <Btn title="Atualizar" small variant="light" onPress={load} loading={busy} />
+          </View>
+
+          <Message text={error} />
+          {!data && busy ? <Txt style={styles.empty}>Carregando…</Txt> : null}
+
+          {data ? (
+            <>
+              <View style={styles.summaryRow}>
+                <SummaryTile value={data.answered} label="respostas" />
+                <SummaryTile value={`${percent(data.correct, data.answered)}%`} label="de acerto" color={chartColors.correct} />
+                <SummaryTile value={data.wrong} label="erros" color={chartColors.wrong} />
+              </View>
+
+              <Section title="Acertos e erros por dia" hint="Últimos 30 dias. Toque numa coluna para ver o dia.">
+                <DailyChart daily={data.daily} />
+              </Section>
+
+              <Section title="Dificuldade por tema" hint="Temas com maior taxa de erro primeiro.">
+                <ErrorMeters rows={data.by_module} ranked limit={5} emptyText="Este aluno ainda não respondeu perguntas." />
+              </Section>
+
+              <Section title="Por nível de dificuldade">
+                <ErrorMeters rows={data.by_difficulty} />
+              </Section>
+
+              <Section title="Por tipo de pergunta">
+                <ErrorMeters rows={data.by_kind} />
+              </Section>
+
+              <Section
+                title="Últimos erros"
+                hint={data.mistakes.length ? 'O que o aluno respondeu e qual era a resposta certa.' : undefined}
+              >
+                {data.mistakes.length ? (
+                  data.mistakes.map((m, i) => <MistakeItem key={`${m.activity_id}-${i}`} mistake={m} />)
+                ) : (
+                  <Txt style={styles.empty}>Nenhum erro registrado. 🎉</Txt>
+                )}
+              </Section>
+            </>
+          ) : null}
+        </View>
+      </ScrollView>
+    </MenuBackground>
+  );
+}
+
+function MistakeItem({ mistake: m }) {
+  return (
+    <View style={styles.mistake}>
+      <Txt weight="semibold" style={styles.mistakeQ}>
+        {m.question}
+        {m.prompt ? <Txt weight="bold" style={styles.mistakePrompt}>{`  ${m.prompt}`}</Txt> : null}
+      </Txt>
+      <View style={styles.answerRow}>
+        <View style={[styles.answerTag, { backgroundColor: '#FBE9E1' }]}>
+          <Txt weight="bold" style={[styles.answerTagText, { color: colors.wrongDark }]}>Respondeu</Txt>
+        </View>
+        <Txt style={styles.answerText}>{m.answer || '(sem resposta)'}</Txt>
+      </View>
+      <View style={styles.answerRow}>
+        <View style={[styles.answerTag, { backgroundColor: '#E7F6EC' }]}>
+          <Txt weight="bold" style={[styles.answerTagText, { color: colors.correctDark }]}>Correto</Txt>
+        </View>
+        <Txt style={styles.answerText}>{m.correct_answer}</Txt>
+      </View>
+      <Txt style={styles.mistakeMeta}>
+        {m.module} · {m.difficulty} · {m.kind} · {formatDateTime(m.completed_at)}
       </Txt>
     </View>
   );
@@ -313,5 +467,20 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space.md, rowGap: 2, marginTop: space.xs },
   stat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   statText: { fontSize: 13, color: colors.ink },
-  sync: { fontSize: 12, marginTop: space.xs },
+  sync: { fontSize: 12 },
+  studentHover: { backgroundColor: '#FFF9F4' },
+  cardFoot: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs, gap: space.sm, flexWrap: 'wrap' },
+  details: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  detailsText: { fontSize: 12, color: colors.orangeDark },
+  inlineBack: { position: 'relative', top: 0, left: 0 },
+  listTitle: { fontSize: 18, color: colors.ink, marginBottom: space.sm, marginTop: space.xs },
+
+  mistake: { borderTopWidth: 1, borderTopColor: colors.line, paddingVertical: space.sm },
+  mistakeQ: { fontSize: 14, color: colors.ink },
+  mistakePrompt: { fontSize: 14, color: colors.orangeDark },
+  answerRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: 4 },
+  answerTag: { borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1, minWidth: 78, alignItems: 'center' },
+  answerTagText: { fontSize: 11 },
+  answerText: { fontSize: 14, color: colors.ink, flexShrink: 1 },
+  mistakeMeta: { fontSize: 11, color: colors.muted, marginTop: 4 },
 });
