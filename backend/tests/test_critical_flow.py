@@ -211,3 +211,45 @@ def test_register_and_settings():
             json={"student_id": DEMO_STUDENT_ID, "offline_attempts": []},
         )
         assert forged.status_code == 403
+
+
+def test_educator_charts_and_mistakes():
+    from datetime import datetime, timedelta, timezone
+
+    with TestClient(app) as client:
+        reg = client.post("/api/v1/auth/register", json={"username": "aluno_graf", "password": "abcd"})
+        token, sid = reg.json()["token"], reg.json()["user"]["id"]
+        acts = client.get("/api/v1/content/sync?since_version=0", headers=auth(token)).json()["activities"]
+        choice = [a for a in acts if a["kind"] == "choice" and a["difficulty"] == "facil"][:3]
+        wrong = next(o for o in choice[2]["options"] if o != choice[2]["correct_answer"])
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        batch = [
+            {**attempt("grafico-1", choice[0]["id"], choice[0]["correct_answer"]), "completed_at": yesterday},
+            {**attempt("grafico-2", choice[1]["id"], choice[1]["correct_answer"]), "completed_at": yesterday},
+            {**attempt("grafico-3", choice[2]["id"], wrong), "completed_at": yesterday},
+            attempt("graf-4-antiga", choice[0]["id"], "x"),  # fora da janela de 30 dias
+        ]
+        res = client.post("/api/v1/sync/attempts", headers=auth(token), json={"student_id": sid, "offline_attempts": batch})
+        assert res.status_code == 200, res.text
+
+        edu = client.post("/api/v1/auth/login", json={"username": "educador", "password": "4321"}).json()["token"]
+        # Aluno não vê as estatísticas.
+        assert client.get("/api/v1/educator/overview", headers=auth(token)).status_code == 403
+        assert client.get(f"/api/v1/educator/students/{sid}", headers=auth(token)).status_code == 403
+        assert client.get("/api/v1/educator/students/nao-existe", headers=auth(edu)).status_code == 404
+
+        detail = client.get(f"/api/v1/educator/students/{sid}", headers=auth(edu)).json()
+        assert (detail["answered"], detail["correct"], detail["wrong"]) == (4, 2, 2)
+        assert len(detail["daily"]) == 30
+        assert sum(d["correct"] + d["wrong"] for d in detail["daily"]) == 3  # a antiga fica de fora
+        assert detail["daily"][-2]["correct"] == 2 and detail["daily"][-2]["wrong"] == 1
+        facil = next(d for d in detail["by_difficulty"] if d["key"] == "facil")
+        assert (facil["answered"], facil["wrong"], facil["label"]) == (4, 2, "Fácil")
+        assert sum(m["answered"] for m in detail["by_module"]) == 4
+        assert {k["key"] for k in detail["by_kind"]} == {"choice"}
+        assert len(detail["mistakes"]) == 2
+        assert detail["mistakes"][0]["answer"] == wrong  # mais recente primeiro
+        assert detail["mistakes"][0]["correct_answer"] == choice[2]["correct_answer"]
+
+        overview = client.get("/api/v1/educator/overview", headers=auth(edu)).json()
+        assert overview["answered"] >= 4 and len(overview["daily"]) == 30

@@ -1,7 +1,7 @@
 import json
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from sqlalchemy import func, select
@@ -339,6 +339,104 @@ def educator_students(db: Session = Depends(get_db), _: dict = Depends(require_e
         })
     return result
 
+
+
+# Estatísticas para os gráficos do painel (turma inteira ou um aluno).
+STATS_DAYS = 30
+MISTAKES_LIMIT = 30
+
+
+def _attempt_rows(db: Session, student_id: str | None = None):
+    query = (
+        select(ActivityAttempt, Activity, Module)
+        .join(Activity, Activity.id == ActivityAttempt.activity_id)
+        .join(Module, Module.id == Activity.module_id)
+    )
+    if student_id:
+        query = query.where(ActivityAttempt.student_id == student_id)
+    return db.execute(query).all()
+
+
+def _breakdown(rows, key, label, order) -> list[dict]:
+    groups: dict = {}
+    for attempt, activity, module in rows:
+        k = key(activity, module)
+        g = groups.setdefault(k, {"key": k, "label": label(activity, module), "order": order(activity, module),
+                                  "answered": 0, "wrong": 0})
+        g["answered"] += 1
+        g["wrong"] += 0 if attempt.is_correct else 1
+    return sorted(groups.values(), key=lambda g: g["order"])
+
+
+def _stats(rows, days: int) -> dict:
+    today = datetime.now(timezone.utc)
+    day_keys = [game_rules.day_key(today - timedelta(days=i)) for i in range(days - 1, -1, -1)]
+    daily = {d: {"date": d, "correct": 0, "wrong": 0} for d in day_keys}
+    for attempt, _, _ in rows:
+        bucket = daily.get(game_rules.day_key(attempt.completed_at))
+        if bucket:
+            bucket["correct" if attempt.is_correct else "wrong"] += 1
+
+    difficulty_order = {d: i for i, d in enumerate(game_rules.DIFFICULTIES)}
+    kind_order = {k: i for i, k in enumerate(ACTIVITY_KINDS)}
+    answered = len(rows)
+    wrong = sum(0 if a.is_correct else 1 for a, _, _ in rows)
+    return {
+        "answered": answered,
+        "correct": answered - wrong,
+        "wrong": wrong,
+        "daily": list(daily.values()),
+        "by_module": _breakdown(rows, lambda a, m: m.id, lambda a, m: m.title, lambda a, m: m.order_index),
+        "by_difficulty": _breakdown(rows, lambda a, m: a.difficulty, lambda a, m: DIFFICULTY_LABELS.get(a.difficulty, a.difficulty),
+                                    lambda a, m: difficulty_order.get(a.difficulty, 99)),
+        "by_kind": _breakdown(rows, lambda a, m: a.kind, lambda a, m: ACTIVITY_KINDS.get(a.kind, a.kind),
+                              lambda a, m: kind_order.get(a.kind, 99)),
+    }
+
+
+DIFFICULTY_LABELS = {"facil": "Fácil", "medio": "Médio", "dificil": "Difícil"}
+ACTIVITY_KINDS = {"choice": "Escolher a resposta", "listen": "Ouvir e escolher", "voice": "Falar a frase"}
+
+
+@app.get("/api/v1/educator/overview")
+def educator_overview(days: int = STATS_DAYS, db: Session = Depends(get_db), _: dict = Depends(require_educator)):
+    days = max(7, min(days, 90))
+    return _stats(_attempt_rows(db), days)
+
+
+@app.get("/api/v1/educator/students/{student_id}")
+def educator_student(student_id: str, days: int = STATS_DAYS, db: Session = Depends(get_db),
+                     _: dict = Depends(require_educator)):
+    student = db.get(User, student_id)
+    if not student or student.role != "student":
+        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+    days = max(7, min(days, 90))
+    rows = _attempt_rows(db, student_id)
+    mistakes = sorted((r for r in rows if not r[0].is_correct), key=lambda r: r[0].completed_at, reverse=True)
+    summary = user_out(db, student)
+    return {
+        "student_id": student.id,
+        "name": student.username,
+        "level": summary.level,
+        "coins": summary.coins,
+        "streak": summary.streak,
+        "best_streak": summary.best_streak,
+        **_stats(rows, days),
+        "mistakes": [
+            {
+                "activity_id": activity.id,
+                "module": module.title,
+                "difficulty": DIFFICULTY_LABELS.get(activity.difficulty, activity.difficulty),
+                "kind": ACTIVITY_KINDS.get(activity.kind, activity.kind),
+                "question": activity.question_text,
+                "prompt": activity.prompt,
+                "answer": attempt.selected_answer,
+                "correct_answer": activity.correct_answer,
+                "completed_at": attempt.completed_at,
+            }
+            for attempt, activity, module in mistakes[:MISTAKES_LIMIT]
+        ],
+    }
 
 # --------------------------------------------------------------------------- PWA
 # Em hospedagens de serviço único (ex.: Render), a própria API entrega o PWA.

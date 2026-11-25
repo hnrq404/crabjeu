@@ -72,6 +72,10 @@ export const api = {
     request('/api/v1/auth/login', { method: 'POST', body: { username, password }, timeoutMs }),
   educatorStudents: token =>
     request('/api/v1/educator/students', { token, timeoutMs: WAKE_TIMEOUT_MS }),
+  educatorOverview: token =>
+    request('/api/v1/educator/overview', { token, timeoutMs: WAKE_TIMEOUT_MS }),
+  educatorStudent: (token, studentId) =>
+    request(`/api/v1/educator/students/${encodeURIComponent(studentId)}`, { token, timeoutMs: WAKE_TIMEOUT_MS }),
   me: token => request('/api/v1/me', { token }),
   updateMe: (token, changes) => request('/api/v1/me', { token, method: 'PATCH', body: changes }),
   changePassword: (token, currentPassword, newPassword) =>
