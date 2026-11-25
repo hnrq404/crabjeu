@@ -1,0 +1,5 @@
+# HTTPS automático (Let's Encrypt). O service worker do PWA só funciona em HTTPS.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:80
+}

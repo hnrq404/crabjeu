@@ -1,4 +1,5 @@
 import json
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -28,13 +29,24 @@ DEMO_STUDENT_USERNAME = "joao"
 DEMO_EDUCATOR_USERNAME = "educador"
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    return default if value is None else value.strip().lower() in ("1", "true", "yes", "on")
+
+
 def seed_demo_data(db: Session) -> None:
-    if not db.get(User, DEMO_STUDENT_ID):
+    # Em desenvolvimento cria joao/1234 e educador/4321. Em produção (SEED_DEMO_USERS=false)
+    # não há aluno de demonstração e o educador só é criado se EDUCATOR_PASSWORD for definido.
+    demo = _env_flag("SEED_DEMO_USERS", True)
+    educator_password = os.getenv("EDUCATOR_PASSWORD") or ("4321" if demo else None)
+    educator_username = os.getenv("EDUCATOR_USERNAME") or DEMO_EDUCATOR_USERNAME
+
+    if demo and not db.get(User, DEMO_STUDENT_ID):
         db.add(User(id=DEMO_STUDENT_ID, username=DEMO_STUDENT_USERNAME, role="student",
                     avatar_key="crab", password_hash=hash_pin("1234")))
-    if not db.get(User, DEMO_EDUCATOR_ID):
-        db.add(User(id=DEMO_EDUCATOR_ID, username=DEMO_EDUCATOR_USERNAME, role="educator",
-                    avatar_key="lion", password_hash=hash_pin("4321")))
+    if educator_password and not db.get(User, DEMO_EDUCATOR_ID):
+        db.add(User(id=DEMO_EDUCATOR_ID, username=educator_username, role="educator",
+                    avatar_key="lion", password_hash=hash_pin(educator_password)))
 
     # Cria ou atualiza o conteúdo quando a versão do seed for maior.
     for mod, acts in iter_content():

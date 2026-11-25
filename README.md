@@ -305,6 +305,10 @@ Internet de volta: a sincronização automática envia as tentativas à API
 - O reconhecimento de voz no navegador (Web Speech API) depende de internet e funciona melhor no Chrome. No app nativo (Expo Go) ele ainda não está disponível; o caminho é um *development build* com `expo-speech-recognition`.
 - O armazenamento local da web usa `localStorage` (≈5 MB), suficiente para o conteúdo atual; se o conteúdo crescer muito, migrar para IndexedDB.
 
+## Deploy em produção
+
+O deploy em VPS com HTTPS automático (Caddy), backup do banco e geração do APK Android estão descritos em [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
 ## Build web sem Docker
 
 ```bash
