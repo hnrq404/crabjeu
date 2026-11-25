@@ -9,6 +9,9 @@ const DEFAULT_API_URL =
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
 const TIMEOUT_MS = 10000;
+// Servidores grátis (ex.: Render) "dormem" sem uso e levam ~1 min para acordar.
+// Login/cadastro sem alternativa offline esperam esse tempo em vez de desistir.
+export const WAKE_TIMEOUT_MS = 75000;
 
 /** Erro de rede: servidor inalcançável (o app deve seguir offline). */
 export class OfflineError extends Error {
@@ -26,9 +29,9 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path, { token, method = 'GET', body } = {}) {
+async function request(path, { token, method = 'GET', body, timeoutMs = TIMEOUT_MS } = {}) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, {
@@ -63,9 +66,10 @@ export const api = {
     request('/api/v1/auth/register', {
       method: 'POST',
       body: { username, password, avatar_key: avatarKey },
+      timeoutMs: WAKE_TIMEOUT_MS,
     }),
-  login: (username, password) =>
-    request('/api/v1/auth/login', { method: 'POST', body: { username, password } }),
+  login: (username, password, { timeoutMs } = {}) =>
+    request('/api/v1/auth/login', { method: 'POST', body: { username, password }, timeoutMs }),
   me: token => request('/api/v1/me', { token }),
   updateMe: (token, changes) => request('/api/v1/me', { token, method: 'PATCH', body: changes }),
   changePassword: (token, currentPassword, newPassword) =>

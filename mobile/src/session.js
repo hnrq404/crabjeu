@@ -5,7 +5,7 @@
 
 import * as Crypto from 'expo-crypto';
 
-import { api } from './api';
+import { api, WAKE_TIMEOUT_MS } from './api';
 import * as db from './db';
 import { buildPhases, coinsFor, dayKey, lastWeek, levelInfo, makeId, phaseProgress, streakInfo } from './game';
 import * as speech from './speech';
@@ -88,13 +88,17 @@ const cleanUsername = username => username.trim().toLowerCase();
 
 export async function login(username, password) {
   const name = cleanUsername(username);
+  // Já entrou neste aparelho? Não espera o servidor acordar: cai no login offline rápido.
+  // Primeiro acesso: espera o servidor (pode estar acordando), pois não há alternativa local.
+  const known = await db.getUserByUsername(name);
+  const timeoutMs = known?.password_hash ? undefined : WAKE_TIMEOUT_MS;
   try {
-    return { user: await rememberSession(await api.login(name, password), password), offline: false };
+    return { user: await rememberSession(await api.login(name, password, { timeoutMs }), password), offline: false };
   } catch (e) {
     if (!e.offline) throw e;
 
     // Sem internet: entra com os dados guardados neste aparelho.
-    const local = await db.getUserByUsername(name);
+    const local = known;
     if (!local?.password_hash) {
       throw new Error('Sem internet. O primeiro acesso neste aparelho precisa de conexão.');
     }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Logo } from '../components/art';
@@ -16,6 +16,17 @@ export default function AuthScreen({ onAuthenticated }) {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [slow, setSlow] = useState(false);
+
+  // Resposta demorando: provavelmente o servidor (plano grátis) está acordando.
+  useEffect(() => {
+    if (!busy) {
+      setSlow(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setSlow(true), 6000);
+    return () => clearTimeout(timer);
+  }, [busy]);
 
   const isRegister = mode === 'register';
 
@@ -102,6 +113,10 @@ export default function AuthScreen({ onAuthenticated }) {
             ) : null}
 
             <Message text={error} />
+            <Message
+              kind="info"
+              text={slow ? 'Acordando o servidor… pode levar até 1 minuto. Não feche o app.' : ''}
+            />
 
             <Btn
               title={isRegister ? 'Cadastrar' : 'Entrar'}
