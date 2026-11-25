@@ -11,15 +11,23 @@ Um único serviço (`Dockerfile` da raiz) entrega a API **e** o PWA no mesmo end
 
 1. **Banco (Neon):** crie conta em neon.tech (entrar com GitHub) → *New project* (região São Paulo, se houver) →
    copie a *connection string* (`postgresql://...neon.tech/neondb?sslmode=require`).
-2. **App (Render):** crie conta em render.com (entrar com GitHub) → **New → Blueprint** → escolha o repositório
-   `crabjeu` (e a branch com o `render.yaml`). Ele lê o `render.yaml` e pede:
-   - `DATABASE_URL`: a connection string do Neon;
-   - `EDUCATOR_PASSWORD`: a senha do educador.
+2. **App (Render):** crie conta em render.com (entrar com GitHub) → **New → Web Service** → aba
+   **Public Git Repository** → `https://github.com/hnrq404/crabjeu` → **Connect**. Preencha:
+   - **Language:** Docker · **Branch:** `main` · **Region:** Virginia (US East) · **Instance Type:** Free
+   - **Advanced → Dockerfile Path:** `./Dockerfile` · **Health Check Path:** `/health`
+   - **Environment Variables:** `DATABASE_URL` (Neon), `JWT_SECRET` (botão *Generate* ou texto aleatório longo),
+     `EDUCATOR_PASSWORD`, `EDUCATOR_USERNAME=educador`, `SEED_DEMO_USERS=false`, `JWT_EXPIRE_HOURS=720`
 
-   O `JWT_SECRET` é gerado sozinho. Clique em **Apply** e espere o build (~5 min).
+   Clique em **Deploy Web Service** e espere o build (~5 min).
+
+   > Com acesso de admin ao repositório no GitHub, dá para usar **New → Blueprint**: ele lê o `render.yaml`,
+   > gera o `JWT_SECRET` sozinho e passa a publicar automaticamente a cada push.
 3. Abra `https://crabjeu-xxxx.onrender.com` (aparece no painel) e teste `…/health`.
+4. **UptimeRobot (para não dormir):** em uptimerobot.com → **New monitor** → HTTP(s) →
+   `https://crabjeu-xxxx.onrender.com/health` → intervalo de 5 minutos.
 
-Para atualizar: basta dar push na branch; o Render refaz o deploy sozinho.
+Para atualizar (repositório público): **Manual Deploy → Deploy latest commit** no Render.
+O painel do educador fica em `https://crabjeu-xxxx.onrender.com/educador` (ou pelo link "Sou educador" no login).
 
 **Como fica o offline nesse plano grátis:** o serviço "dorme" após 15 min sem uso e leva ~1 min para acordar.
 Isso não atrapalha o aluno: o app abre do cache, as respostas ficam no aparelho e a sincronização

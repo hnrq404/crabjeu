@@ -211,11 +211,37 @@ O backend concentra regras de negócio, autenticação, validação dos dados, s
 
 Responsável pelo armazenamento centralizado das informações utilizadas pelo sistema e pelo acompanhamento dos educadores.
 
-## Infraestrutura de desenvolvimento
+## Infraestrutura
 
-- **Docker**
-- **Docker Compose**
+- **Docker** e **Docker Compose** (desenvolvimento e deploy em VPS)
 - **Git / GitHub**
+- **Render** (hospedagem grátis da API + PWA) e **Neon** (PostgreSQL grátis), ou uma VPS com **Caddy** para HTTPS automático
+- **EAS Build** (Expo) para gerar o APK Android
+
+---
+
+# 📁 Estrutura do repositório
+
+```text
+crabjeu/
+├── backend/                 API FastAPI
+│   ├── app/main.py          rotas (auth, sincronização, painel do educador) e entrega do PWA
+│   ├── app/game_rules.py    regras do jogo (fonte da verdade)
+│   ├── app/seed_content.py  banco de perguntas (16 temas, CONTENT_VERSION)
+│   └── tests/               testes + casos compartilhados com o app
+├── mobile/                  app React Native / Expo (nativo + PWA)
+│   ├── src/screens/         Auth, Home, Game, Settings e Educator (painel)
+│   ├── src/components/      UI, HUD, ilustrações e gráficos (charts.js)
+│   ├── src/db.js / db.web.js  armazenamento local (SQLite / navegador)
+│   ├── scripts/             geração do service worker e checagem das regras
+│   └── eas.json             perfis de build do APK
+├── deploy/                  Caddyfile e script de instalação em VPS
+├── docs/DEPLOY.md           guia completo de deploy
+├── Dockerfile               imagem única (API + PWA) usada no Render
+├── render.yaml              blueprint do Render
+├── docker-compose.yml       ambiente de desenvolvimento
+└── docker-compose.prod.yml  produção em VPS (com HTTPS)
+```
 
 ---
 
@@ -235,7 +261,7 @@ docker compose up --build
 | `api`   | http://localhost:8000 | FastAPI (também usada pelo app nativo) |
 | `db`    | localhost:5432 | PostgreSQL |
 
-Conta de demonstração: usuário **joao**, senha **1234** (ou crie uma conta em "Cadastrar-se").
+Contas de demonstração (criadas só em desenvolvimento): aluno **joao** / **1234** e educador **educador** / **4321** (painel em http://localhost:8080/educador). Também dá para criar alunos em "Cadastrar-se".
 
 > **Atualizando de uma versão anterior?** O esquema do banco mudou (login por usuário/senha e banco de perguntas por tema). Recrie o banco de desenvolvimento com `docker compose down -v && docker compose up --build`.
 
@@ -298,20 +324,56 @@ Internet de volta: a sincronização automática envia as tentativas à API
 
 ## Como testar o modo offline
 
-1. Abra http://localhost:8080, escolha o perfil e faça login.
+1. Abra http://localhost:8080 e faça login (ou cadastre um aluno).
 2. No DevTools do navegador (F12) → **Application → Service Workers**, marque **Offline** (ou pare os containers com `docker compose stop`).
 3. Recarregue a página: o jogo continua abrindo. Jogue uma rodada e veja o aviso "respostas aguardando internet".
 4. Volte a ficar online: as respostas sobem sozinhas e o selo mostra "Progresso salvo no servidor".
 
 ## Limitações conhecidas
 
-- **HTTPS é obrigatório fora do `localhost`.** Navegadores só ativam service worker em `https://` ou `http://localhost`. Para os alunos acessarem pelo celular, o container `web` precisa ser publicado com HTTPS (ex.: hospedagem com certificado, ou um proxy reverso com Let's Encrypt).
+- **HTTPS é obrigatório fora do `localhost`.** Navegadores só ativam service worker em `https://` ou `http://localhost`. As duas formas de deploy abaixo já entregam HTTPS.
+- **Plano grátis do Render "dorme"** após 15 min sem acesso. O app tolera isso (login e cadastro esperam até ~1 min com o aviso "Acordando o servidor…"), mas o recomendado é um monitor no UptimeRobot (veja o deploy).
+- **Painel do educador precisa de internet** e mostra só o que já foi sincronizado; perguntas puladas não contam como erro.
 - O reconhecimento de voz no navegador (Web Speech API) depende de internet e funciona melhor no Chrome. No app nativo (Expo Go) ele ainda não está disponível; o caminho é um *development build* com `expo-speech-recognition`.
 - O armazenamento local da web usa `localStorage` (≈5 MB), suficiente para o conteúdo atual; se o conteúdo crescer muito, migrar para IndexedDB.
 
-## Deploy em produção
+# 🚀 Deploy em produção
 
-O deploy grátis (Render + Neon, ou VPS com Docker e HTTPS automático), backup do banco e geração do APK Android estão descritos em [`docs/DEPLOY.md`](docs/DEPLOY.md).
+O passo a passo completo está em [`docs/DEPLOY.md`](docs/DEPLOY.md). Resumo:
+
+| Opção | Custo | Como funciona |
+|-------|-------|---------------|
+| **Render + Neon** (recomendado) | grátis, sem cartão | o `Dockerfile` da raiz gera uma imagem única: a API FastAPI também entrega o PWA, no mesmo endereço HTTPS. Banco no Neon |
+| **VPS com Docker** | grátis (ex.: Oracle Free) ou pago | `docker-compose.prod.yml` + Caddy (HTTPS automático). `deploy/setup-vps.sh` instala tudo em um comando |
+
+**Render + Neon em 4 passos**
+
+1. **Neon:** crie um projeto na região *AWS US East (N. Virginia)* e copie a *connection string*.
+2. **Render:** *New → Web Service → Public Git Repository* com `https://github.com/hnrq404/crabjeu`, branch `main`, linguagem **Docker**, região **Virginia**, plano **Free**, *Health Check Path* `/health`. (Quem tiver acesso de admin ao repositório pode usar *New → Blueprint*, que lê o `render.yaml`.)
+3. **Variáveis de ambiente** (tabela abaixo) e **Deploy**.
+4. **UptimeRobot:** monitor HTTP(s) em `https://SEU-APP.onrender.com/health` a cada 5 min, para o servidor não dormir.
+
+Para publicar uma nova versão: *Manual Deploy → Deploy latest commit* no Render (ou automático, se o serviço foi criado pelo Blueprint).
+
+**Variáveis de ambiente**
+
+| Variável | Valor | Observação |
+|----------|-------|------------|
+| `DATABASE_URL` | connection string do Neon | aceita `postgres://` ou `postgresql://` |
+| `JWT_SECRET` | texto aleatório longo | **não troque depois que os alunos começarem a usar**: todos teriam que logar de novo com internet |
+| `JWT_EXPIRE_HOURS` | `720` | por quanto tempo o aluno pode ficar offline e ainda sincronizar sem novo login |
+| `SEED_DEMO_USERS` | `false` | em produção não cria `joao/1234` nem `educador/4321` |
+| `EDUCATOR_USERNAME` | `educador` | conta do painel do educador |
+| `EDUCATOR_PASSWORD` | senha forte | se vazio em produção, nenhum educador é criado |
+
+**App Android:** troque o domínio em `mobile/eas.json` e rode `npx eas-cli build --platform android --profile preview` dentro de `mobile/` para gerar o APK.
+
+# 🧪 Testes
+
+```bash
+cd backend && pip install -r requirements.txt && pytest   # API, sincronização, painel do educador
+cd mobile && npm run check:rules                           # regras do app iguais às do servidor
+```
 
 ## Build web sem Docker
 
