@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Logo } from '../components/art';
 import { MenuBackground } from '../components/backgrounds';
@@ -9,7 +9,7 @@ import { colors, radius, space } from '../theme';
 
 const USERNAME_RE = /^[A-Za-z0-9_.]{3,20}$/;
 
-export default function AuthScreen({ onAuthenticated }) {
+export default function AuthScreen({ onAuthenticated, onEducator }) {
   const [mode, setMode] = useState('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -134,6 +134,16 @@ export default function AuthScreen({ onAuthenticated }) {
             {!isRegister ? (
               <Btn title="Cadastrar-se" variant="secondary" small onPress={() => switchMode('register')} style={styles.secondButton} />
             ) : null}
+            {onEducator ? (
+              <Pressable
+                onPress={onEducator}
+                accessibilityRole="link"
+                hitSlop={8}
+                style={({ pressed, focused }) => [styles.educatorLink, pressed && { opacity: 0.6 }, focused && styles.educatorFocus]}
+              >
+                <Txt weight="semibold" style={styles.educatorText}>Sou educador · Ver progresso dos alunos</Txt>
+              </Pressable>
+            ) : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -167,4 +177,7 @@ const styles = StyleSheet.create({
   divider: { flex: 1, height: 1, backgroundColor: colors.line },
   switchText: { fontSize: 13, color: colors.muted, marginHorizontal: space.sm },
   secondButton: { alignSelf: 'stretch', marginTop: space.sm },
+  educatorLink: { marginTop: space.lg, paddingVertical: space.xs, paddingHorizontal: space.sm, borderRadius: radius.sm },
+  educatorFocus: { outlineWidth: 2, outlineColor: colors.focus, outlineStyle: 'solid' },
+  educatorText: { fontSize: 13, color: colors.orangeDark, textDecorationLine: 'underline', textAlign: 'center' },
 });
